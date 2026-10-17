@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' memo: blob: data:; media-src 'self' memo: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Memo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="bg"><i></i><i></i><i></i></div>
+
+  <main id="stage" aria-label="Nuvem de memórias">
+    <div id="world"></div>
+  </main>
+
+  <header id="bar">
+    <div class="row">
+      <div class="brand"><span class="dot"></span>memo</div>
+
+      <label class="search">
+        <svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+        <input id="q" type="search" placeholder="Buscar por nome ou pasta…" autocomplete="off" spellcheck="false" enterkeyhint="search">
+        <button id="clearq" type="button" aria-label="Limpar busca" hidden>
+          <svg viewBox="0 0 24 24" class="ico"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </label>
+
+      <div class="seg" id="types" role="group" aria-label="Tipo">
+        <button data-type="all" class="on">Tudo</button>
+        <button data-type="image">Fotos</button>
+        <button data-type="video">Vídeos</button>
+      </div>
+
+      <div class="seg icons" id="layouts" role="group" aria-label="Layout"></div>
+
+      <div class="actions">
+        <button id="shuffle" class="round" aria-label="Embaralhar" title="Embaralhar">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M4 7h3.5c2 0 3.3 1 4.5 3l1.5 4c1.2 2 2.5 3 4.5 3H20M4 17h3.5c1.2 0 2.2-.4 3-1.2M13 8.2c.8-.8 1.8-1.2 3-1.2H20M17.5 4 20.5 7l-3 3M17.5 14l3 3-3 3"/></svg>
+        </button>
+        <button id="fit" class="round" aria-label="Centralizar" title="Centralizar">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/><circle cx="12" cy="12" r="2.2"/></svg>
+        </button>
+        <button id="fs" class="round" aria-label="Tela cheia" title="Tela cheia">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+        <button id="menu" class="round" aria-label="Mais opções" title="Mais opções">
+          <svg viewBox="0 0 24 24" class="ico fill"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chips" id="chips" aria-label="Pastas"></div>
+    <div class="chips sub" id="subchips" hidden></div>
+  </header>
+
+  <div id="status"></div>
+
+  <div id="popover" hidden>
+    <div class="pop-title">Ordem</div>
+    <button data-sort="shuffle">Embaralhada</button>
+    <button data-sort="recent">Mais recentes</button>
+    <button data-sort="name">Nome (A–Z)</button>
+    <div class="pop-sep"></div>
+    <button data-act="folder">Trocar pasta…</button>
+    <button data-act="reload">Recarregar arquivos</button>
+    <button data-act="fullscreen">Tela cheia</button>
+    <button data-act="quit" class="danger">Sair do app</button>
+  </div>
+
+  <section id="empty" class="center" hidden>
+    <h2>Nada encontrado</h2>
+    <p>Tente outra palavra ou limpe os filtros.</p>
+    <button id="reset" class="pill">Limpar filtros</button>
+  </section>
+
+  <section id="welcome" class="center" hidden>
+    <div class="orb"></div>
+    <h1>Suas memórias, numa nuvem</h1>
+    <p>Escolha a pasta com suas fotos e vídeos. As subpastas viram categorias automaticamente.</p>
+    <button id="choose" class="pill big">Escolher pasta</button>
+  </section>
+
+  <section id="loading" class="center"><div class="spinner"></div></section>
+
+  <div id="viewer" hidden>
+    <div class="v-backdrop"></div>
+    <div class="v-stage"></div>
+    <div class="v-top">
+      <div class="v-title"><b></b><span></span></div>
+      <div class="v-actions">
+        <span class="v-count"></span>
+        <button id="v-play" class="round" aria-label="Apresentação" title="Apresentação (espaço)"></button>
+        <button id="v-fs" class="round" aria-label="Tela cheia" title="Tela cheia (F)">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+        <button id="v-close" class="round" aria-label="Fechar" title="Fechar (Esc)">
+          <svg viewBox="0 0 24 24" class="ico"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+    </div>
+    <button class="v-nav prev" aria-label="Anterior"><svg viewBox="0 0 24 24" class="ico"><path d="m15 5-7 7 7 7"/></svg></button>
+    <button class="v-nav next" aria-label="Próxima"><svg viewBox="0 0 24 24" class="ico"><path d="m9 5 7 7-7 7"/></svg></button>
+    <div class="v-progress"><i></i></div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

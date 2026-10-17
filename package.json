@@ -1,0 +1,23 @@
+{
+  "name": "app-memo",
+  "version": "0.1.0",
+  "description": "Nuvem de memórias: fotos e vídeos de uma pasta em uma tela touch.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "kiosk": "electron . --kiosk",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.thiagovallory.appmemo",
+    "productName": "Memo",
+    "files": ["src/**/*", "package.json"],
+    "win": { "target": "nsis" },
+    "mac": { "target": "dmg" },
+    "linux": { "target": "AppImage" }
+  }
+}
