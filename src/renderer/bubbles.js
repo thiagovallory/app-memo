@@ -4,7 +4,7 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 /**
  * Bolhas de sabão: um grupo de fotos/vídeos sobe lentamente pela tela, balançando e se esbarrando.
- * Quando uma bolha sai pelo topo, entra outra pelo fundo, então todo o acervo vai passando.
+ * Quando uma bolha sai por qualquer lado, entra outra por baixo ou pelas laterais, então todo o acervo vai passando.
  */
 export class Bubbles {
   constructor({ host, create }) {
@@ -73,10 +73,24 @@ export class Bubbles {
   spawn(item, initial) {
     const rand = this.rand;
     const r = (40 + 56 * Math.pow(rand(), 1.5)) * this.scale * this.grow;
+    const vy = -(14 + 26 * rand()) * (1.25 - r / (200 * this.scale));
+    let vx = (rand() - 0.5) * 70;
+    // metade das bolhas nasce pelas laterais, andando para dentro da tela
+    const side = !initial && rand() < 0.4;
+    if (side) vx = (rand() < 0.5 ? 1 : -1) * (18 + rand() * 34);
+
     let x = 0, y = 0;
     for (let tries = 0; tries < 40; tries++) {
-      x = r + rand() * Math.max(1, this.W - 2 * r);
-      y = initial ? r + rand() * Math.max(1, this.H - 2 * r) : this.H + r + rand() * 140;
+      if (initial) {
+        x = r + rand() * Math.max(1, this.W - 2 * r);
+        y = r + rand() * Math.max(1, this.H - 2 * r);
+      } else if (side) {
+        x = vx > 0 ? -r - rand() * 60 : this.W + r + rand() * 60;
+        y = rand() * this.H;
+      } else {
+        x = r + rand() * Math.max(1, this.W - 2 * r);
+        y = this.H + r + rand() * 140;
+      }
       if (this.bubbles.every((b) => Math.hypot(b.x - x, b.y - y) > b.r + r + 8)) break;
     }
     const el = this.create(item, r * 2);
@@ -84,9 +98,7 @@ export class Bubbles {
     if (initial) el.style.transitionDelay = `${rand() * 0.6}s`;
     this.host.append(el);
     this.bubbles.push({
-      item, el, x, y, r,
-      vy: -(14 + 26 * rand()) * (1.25 - r / (200 * this.scale)),
-      vx: (rand() - 0.5) * 10,
+      item, el, x, y, r, vx, vy,
       ph: rand() * 6.28, sf: 0.25 + rand() * 0.4, sw: 6 + rand() * 12,
       ix: 0, iy: 0,
     });
@@ -118,9 +130,6 @@ export class Bubbles {
       b.ix *= damp; b.iy *= damp;
       b.x += (b.vx + Math.sin(this.t * b.sf + b.ph) * b.sw + b.ix) * dt;
       b.y += (b.vy + b.iy) * dt;
-      if (b.x < b.r) { b.x = b.r; b.ix = Math.abs(b.ix); b.vx = Math.abs(b.vx); }
-      else if (b.x > this.W - b.r) { b.x = this.W - b.r; b.ix = -Math.abs(b.ix); b.vx = -Math.abs(b.vx); }
-      if (b.y > this.H + b.r + 400) b.y = this.H + b.r + 400;
     }
 
     // esbarrões macios: afastam as bolhas que se sobrepõem
@@ -141,7 +150,8 @@ export class Bubbles {
 
     for (let i = list.length - 1; i >= 0; i--) {
       const b = list[i];
-      if (b.y < -b.r - 30) {
+      const out = b.y < -b.r - 30 || b.x < -b.r - 120 || b.x > this.W + b.r + 120 || b.y > this.H + b.r + 400;
+      if (out) {
         b.el.remove();
         list.splice(i, 1);
         this.spawn(this.next(), false);

@@ -22,7 +22,7 @@ const state = {
   query: '',
   type: store.get('type', 'all'),
   folder: null,
-  layout: layoutById(store.get('layout', 'cloud')).id,
+  layout: 'bubbles', // sempre abre em bolhas
   sort: store.get('sort', 'shuffle'),
   seed: (Math.random() * 1e9) | 0,
 };
@@ -470,7 +470,6 @@ function setFolder(path) {
 
 function setLayout(id) {
   state.layout = id;
-  store.set('layout', id);
   document.querySelectorAll('#layouts button').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
   relayout();
 }

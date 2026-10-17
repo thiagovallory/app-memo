@@ -36,7 +36,7 @@ Formatos: fotos `jpg jpeg png gif webp avif bmp`; vídeos `mp4 webm mov m4v ogv`
 ## Muitas fotos
 
 - **Nuvem** se adapta ao tamanho do acervo: com poucas fotos as bolhas crescem, com muitas encolhem até preencher a tela. Quando passam do que cabe (cerca de 70 a 160, conforme o monitor), mostra um sorteio e troca as fotos sozinha a cada 30 s se ninguém estiver mexendo. O botão embaralhar sorteia outras na hora.
-- **Bolhas**: bolhas de sabão sobem pela tela e, ao sair por cima, entram outras por baixo, então o acervo todo vai passando. Dá para empurrá-las com o dedo ou mouse, e tocar abre a foto.
+- **Bolhas** (o app sempre abre nele): bolhas de sabão sobem pela tela e, ao sair por qualquer lado, entram outras por baixo ou pelas laterais, então o acervo todo vai passando. Dá para empurrá-las com o dedo ou mouse, e tocar abre a foto.
 
 ## Teclado na tela
 
