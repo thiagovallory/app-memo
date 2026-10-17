@@ -22,9 +22,10 @@ export function rng(seed) {
 
 /**
  * Posiciona círculos (raios dados) o mais perto possível do centro, seguindo uma espiral.
- * `stretch` > 1 achata a espiral em elipse (telas largas). Retorna [{x, y}] na mesma ordem.
+ * `stretch` alarga a espiral em elipse (telas largas); `squareness` > 2 a deixa quase retangular,
+ * para o conjunto preencher a tela. Retorna [{x, y}] na mesma ordem.
  */
-export function packCircles(radii, { gap = 14, stretch = 1 } = {}) {
+export function packCircles(radii, { gap = 14, stretch = 1, squareness = 2 } = {}) {
   const placed = [];
   const out = new Array(radii.length);
   const maxR = radii.reduce((m, r) => Math.max(m, r), 0);
@@ -69,8 +70,11 @@ export function packCircles(radii, { gap = 14, stretch = 1 } = {}) {
     let theta = (startR * 2 * Math.PI) / pitch;
     for (let guard = 0; guard < 400000; guard++) {
       const rad = (pitch / (2 * Math.PI)) * theta;
-      const x = rad * Math.cos(theta) * stretch;
-      const y = rad * Math.sin(theta);
+      const c = Math.cos(theta);
+      const sn = Math.sin(theta);
+      const f = squareness > 2 ? Math.pow(Math.pow(Math.abs(c), squareness) + Math.pow(Math.abs(sn), squareness), -1 / squareness) : 1;
+      const x = rad * c * f * stretch;
+      const y = rad * sn * f;
       if (fits(x, y, r)) {
         add(x, y, r);
         out[i] = { x, y };

@@ -20,7 +20,10 @@
 
       <label class="search">
         <svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
-        <input id="q" type="search" placeholder="Buscar por nome ou pasta…" autocomplete="off" spellcheck="false" enterkeyhint="search">
+        <input id="q" type="search" inputmode="none" placeholder="Buscar por nome ou pasta…" autocomplete="off" spellcheck="false" enterkeyhint="search">
+        <button id="kbd" type="button" aria-label="Teclado na tela" title="Teclado na tela">
+          <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M7 10h.01M10.5 10h.01M14 10h.01M17.5 10h.01M7 14h10"/></svg>
+        </button>
         <button id="clearq" type="button" aria-label="Limpar busca" hidden>
           <svg viewBox="0 0 24 24" class="ico"><path d="m6 6 12 12M18 6 6 18"/></svg>
         </button>

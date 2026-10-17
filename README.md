@@ -27,15 +27,24 @@ Para gerar um instalador (Windows/Mac/Linux): `npm run dist`.
 | Zoom na foto | pinça ou toque duplo | roda ou clique duplo |
 | Apresentação automática | botão ▶ | espaço |
 | Tela cheia | botão | F ou F11 |
-| Buscar | campo de busca | `/` ou Ctrl+K |
+| Buscar | tocar no campo (abre o teclado na tela) | `/` ou Ctrl+K |
 
 A busca ignora acentos e procura no nome do arquivo e no caminho das pastas. Os chips no topo filtram por pasta (subpastas aparecem numa segunda linha). No layout *Pastas*, tocar no nome de uma pasta filtra por ela.
 
 Formatos: fotos `jpg jpeg png gif webp avif bmp`; vídeos `mp4 webm mov m4v ogv` (o que o Chromium reproduz; vídeos HEVC/H.265 podem não tocar).
 
+## Muitas fotos
+
+- **Nuvem** se adapta ao tamanho do acervo: com poucas fotos as bolhas crescem, com muitas encolhem até preencher a tela. Quando passam do que cabe (cerca de 70 a 160, conforme o monitor), mostra um sorteio e troca as fotos sozinha a cada 30 s se ninguém estiver mexendo. O botão embaralhar sorteia outras na hora.
+- **Bolhas**: bolhas de sabão sobem pela tela e, ao sair por cima, entram outras por baixo, então o acervo todo vai passando. Dá para empurrá-las com o dedo ou mouse, e tocar abre a foto.
+
+## Teclado na tela
+
+Tocar no campo de busca abre um teclado próprio (também pelo ícone de teclado no campo). O teclado do sistema não aparece; o teclado físico continua funcionando normalmente.
+
 ## Layouts
 
-Há três: **Nuvem**, **Pastas** (uma ilha por pasta) e **Mosaico**. Para criar outro, adicione um arquivo em `src/renderer/layouts/` e registre em `layouts/index.js`:
+Há quatro: **Nuvem**, **Bolhas**, **Pastas** (uma ilha por pasta) e **Mosaico**. Para criar outro, adicione um arquivo em `src/renderer/layouts/` e registre em `layouts/index.js`:
 
 ```js
 export default {

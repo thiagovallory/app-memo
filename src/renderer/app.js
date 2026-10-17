@@ -1,6 +1,8 @@
 import { layouts, layoutById } from './layouts/index.js';
 import { hashSeed, rng } from './layouts/pack.js';
 import { Viewer } from './viewer.js';
+import { Bubbles } from './bubbles.js';
+import { Keyboard } from './keyboard.js';
 
 const api = window.memo;
 const $ = (sel) => document.querySelector(sel);
@@ -116,7 +118,7 @@ function renderChips() {
 // ---------------------------------------------------------------- câmera (pan / zoom)
 
 const view = { x: 0, y: 0, k: 1 };
-let current = { list: [], pos: new Map(), labels: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
+let current = { list: [], all: [], pos: new Map(), labels: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
 let syncQueued = false;
 let tween = null;
 let inertia = null;
@@ -161,8 +163,8 @@ function fitTarget() {
     const k = Math.min(1, Math.max(MIN_K, byWidth * 0.96));
     return centerOn(cx, b.minY + availH / 2 / k - 20 / k, k);
   }
-  const lo = state.layout === 'cloud' ? 0.42 : MIN_K;
-  return centerOn(cx, (b.minY + b.maxY) / 2, Math.min(1, Math.max(lo, both * 0.94)));
+  if (state.layout === 'cloud') return centerOn(cx, (b.minY + b.maxY) / 2, Math.min(1.6, Math.max(0.3, both * 0.97)));
+  return centerOn(cx, (b.minY + b.maxY) / 2, Math.min(1, Math.max(MIN_K, both * 0.94)));
 }
 
 function animateTo(t, ms = 900) {
@@ -205,6 +207,8 @@ els.stage.addEventListener('pointerdown', (e) => {
   cancelMotion();
   els.popover.hidden = true;
   els.q.blur();
+  keyboard.hide();
+  noteActivity();
   els.stage.setPointerCapture(e.pointerId);
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pts.size === 1) {
@@ -236,6 +240,7 @@ els.stage.addEventListener('pointermove', (e) => {
   }
 
   drag.moved += Math.abs(dx) + Math.abs(dy);
+  if (bubbles.active) { bubbles.nudge(e.clientX, e.clientY, dx, dy); return; }
   const now = performance.now();
   const dt = Math.max(1, now - drag.lt);
   drag.vx = 0.75 * drag.vx + 0.25 * (dx / dt);
@@ -272,6 +277,8 @@ els.stage.addEventListener('pointercancel', endPointer);
 
 els.stage.addEventListener('wheel', (e) => {
   e.preventDefault();
+  noteActivity();
+  if (bubbles.active) return;
   cancelMotion();
   const trackpadPan = !e.ctrlKey && (e.deltaX !== 0 || !Number.isInteger(e.deltaY));
   if (trackpadPan) { view.x -= e.deltaX; view.y -= e.deltaY; applyView(); return; }
@@ -283,8 +290,8 @@ function handleTap(target) {
   if (label) { setFolder(label.dataset.folder === '' ? ROOT : label.dataset.folder); return; }
   const tile = target.closest?.('.tile');
   if (!tile) return;
-  const index = current.list.findIndex((it) => it.id === tile.dataset.id);
-  if (index >= 0) viewer.open(current.list, index, tile.getBoundingClientRect());
+  const index = current.all.findIndex((it) => it.id === tile.dataset.id);
+  if (index >= 0) viewer.open(current.all, index, tile.getBoundingClientRect());
 }
 
 // ---------------------------------------------------------------- tiles (somente o que está na tela)
@@ -293,6 +300,7 @@ const mounted = new Map(); // id -> element
 let labelEls = [];
 
 function makeTile(it, p) {
+  // (também usada pelas bolhas)
   const rand = rng(hashSeed(it.id));
   const el = document.createElement('div');
   el.className = 'tile enter';
@@ -394,20 +402,65 @@ function renderLabels() {
 // ---------------------------------------------------------------- atualização geral
 
 function relayout({ fit = true } = {}) {
-  const list = filtered();
+  const all = filtered();
   const layout = layoutById(state.layout);
-  const res = layout.compute(list, { width: innerWidth, height: innerHeight, seed: state.seed, rootName: baseName(state.root) || 'Início' });
-  current = { list, ...res };
-
   const total = state.items.length;
-  els.status.textContent = list.length === total ? `${total} memórias` : `${list.length} de ${total} memórias`;
-  els.empty.hidden = list.length > 0 || total === 0;
+  els.empty.hidden = all.length > 0 || total === 0;
 
+  if (layout.live) { startBubbles(all, total); return; }
+  stopBubbles();
+
+  const res = layout.compute(all, {
+    width: innerWidth, height: innerHeight, insetTop: insetTop(), seed: state.seed,
+  });
+  const list = res.shown || all;
+  current = { list, all, ...res };
+  state.sampled = list.length < all.length;
+
+  els.status.textContent = statusText(all.length, total, state.sampled ? list.length : 0);
   renderLabels();
   sync();
   if (fit) animateTo(fitTarget(), mounted.size ? 1000 : 1);
   else applyView();
 }
+
+function statusText(count, total, shown) {
+  let t = count === total ? `${total} memórias` : `${count} de ${total} memórias`;
+  if (shown) t += ` · mostrando ${shown} (toque em embaralhar para ver outras)`;
+  return t;
+}
+
+// ---------------------------------------------------------------- bolhas de sabão
+
+const bubbles = new Bubbles({
+  host: els.world,
+  create: (it, d) => makeTile(it, { x: 0, y: 0, w: d, h: d, radius: '50%' }),
+});
+
+function startBubbles(all, total) {
+  cancelMotion();
+  [...mounted.keys()].forEach(retire);
+  current = { list: [], all, pos: new Map(), labels: [], bounds: { minX: 0, minY: 0, maxX: innerWidth, maxY: innerHeight } };
+  renderLabels();
+  view.x = 0; view.y = 0; view.k = 1;
+  els.world.style.transform = 'translate(0px, 0px) scale(1)';
+  els.status.textContent = statusText(all.length, total, 0);
+  bubbles.start(all, { width: innerWidth, height: innerHeight });
+}
+
+function stopBubbles() {
+  if (bubbles.active) bubbles.stop();
+}
+
+// Nuvem com acervo grande: troca as fotos exibidas de tempos em tempos, se ninguém está mexendo.
+let lastActivity = Date.now();
+function noteActivity() { lastActivity = Date.now(); }
+setInterval(() => {
+  if (state.layout !== 'cloud' || !state.sampled || viewer.isOpen || document.hidden) return;
+  if (Date.now() - lastActivity < 25000) return;
+  state.seed = (Math.random() * 1e9) | 0;
+  relayout();
+}, 30000);
 
 function setFolder(path) {
   state.folder = path;
@@ -458,8 +511,11 @@ async function toggleFullscreen() {
 
 const viewer = new Viewer({
   api,
+  onOpen: () => { bubbles.pause(true); keyboard.hide(); },
   onToggleFullscreen: toggleFullscreen,
   onClose(item) {
+    bubbles.pause(false);
+    noteActivity();
     const p = item && current.pos.get(item.id);
     if (!p) return;
     const sx = p.x * view.k + view.x, sy = p.y * view.k + view.y;
@@ -476,7 +532,15 @@ els.q.addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { state.query = els.q.value; relayout(); }, 140);
 });
-els.q.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') els.q.blur(); });
+const keyboard = new Keyboard(els.q);
+const kbdBtn = $('#kbd');
+const syncKbdBtn = () => kbdBtn.classList.toggle('on', keyboard.visible);
+// toque (ou caneta) no campo abre o teclado na tela; com mouse/teclado físico ele continua opcional
+els.q.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') { keyboard.show(); syncKbdBtn(); } });
+kbdBtn.addEventListener('pointerdown', (e) => e.preventDefault());
+kbdBtn.addEventListener('click', () => { keyboard.toggle(); syncKbdBtn(); });
+new MutationObserver(syncKbdBtn).observe(keyboard.el, { attributes: true, attributeFilter: ['hidden', 'class'] });
+els.q.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') { els.q.blur(); keyboard.hide(); } });
 els.clearq.addEventListener('click', () => { els.q.value = ''; els.q.dispatchEvent(new Event('input')); els.q.focus(); });
 
 $('#types').addEventListener('click', (e) => {
@@ -502,7 +566,10 @@ layoutBox.addEventListener('click', (e) => {
   if (b) setLayout(b.dataset.id);
 });
 
-$('#shuffle').addEventListener('click', () => { state.seed = (Math.random() * 1e9) | 0; relayout(); });
+$('#shuffle').addEventListener('click', () => {
+  state.seed = (Math.random() * 1e9) | 0;
+  if (state.sort !== 'shuffle') setSort('shuffle'); else relayout();
+});
 $('#fit').addEventListener('click', () => animateTo(fitTarget(), 800));
 $('#fs').addEventListener('click', toggleFullscreen);
 $('#reset').addEventListener('click', resetFilters);
@@ -535,9 +602,10 @@ for (const row of [els.chips, els.subchips]) {
 }
 
 document.addEventListener('keydown', (e) => {
+  noteActivity();
   if (viewer.isOpen) return;
   const typing = document.activeElement === els.q;
-  if (e.key === 'Escape') { els.popover.hidden = true; els.q.blur(); }
+  if (e.key === 'Escape') { els.popover.hidden = true; els.q.blur(); keyboard.hide(); }
   else if (!typing && (e.key === 'F11' || e.key === 'f')) { e.preventDefault(); toggleFullscreen(); }
   else if (!typing && e.key === 'F5') { e.preventDefault(); load(); }
   else if (!typing && (e.key === '/' || (e.key === 'k' && (e.ctrlKey || e.metaKey)))) { e.preventDefault(); els.q.focus(); }

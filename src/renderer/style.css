@@ -86,8 +86,9 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .search input { flex: 1; min-width: 0; height: 100%; background: none; border: 0; outline: 0; color: var(--ink); font: inherit; font-size: 16px; user-select: text; -webkit-user-select: text; }
 .search input::placeholder { color: var(--ink-3); }
 .search input::-webkit-search-cancel-button { display: none; }
-#clearq { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); }
-#clearq:hover { background: var(--glass-2); }
+#kbd, #clearq { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); }
+#kbd:hover, #clearq:hover { background: var(--glass-2); }
+#kbd.on { color: var(--accent-2); }
 
 .seg { display: flex; padding: 4px; gap: 2px; border-radius: 24px; background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(18px) saturate(1.4); }
 .seg button { height: 40px; min-width: 44px; padding: 0 16px; border-radius: 20px; color: var(--ink-2); font-size: 15px; font-weight: 500;
@@ -181,3 +182,32 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 @media (prefers-reduced-motion: reduce) {
   .tile .float, #bg i { animation: none; }
 }
+
+/* ---------- bolhas de sabão ---------- */
+.tile.bubble { transition: opacity 0.6s ease; will-change: transform; }
+.tile.bubble .face { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.35), 0 10px 40px -10px rgba(120, 190, 255, 0.45); }
+.tile.bubble .face img, .tile.bubble .face video { opacity: 0; }
+.tile.bubble .face img.loaded, .tile.bubble .face video.loaded { opacity: 0.9; }
+.tile.bubble .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; mix-blend-mode: screen;
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.75) 0, rgba(255, 255, 255, 0) 17%),
+    radial-gradient(circle at 74% 82%, rgba(140, 210, 255, 0.35) 0, rgba(140, 210, 255, 0) 38%),
+    conic-gradient(from 30deg, rgba(255, 120, 200, 0.28), rgba(120, 220, 255, 0.28), rgba(255, 240, 140, 0.24), rgba(160, 255, 190, 0.26), rgba(255, 120, 200, 0.28));
+  box-shadow: inset 0 0 24px rgba(255, 255, 255, 0.38), inset 0 0 2px 1.5px rgba(255, 255, 255, 0.7); }
+.tile.bubble:hover .face { transform: scale(1.04); }
+
+/* ---------- teclado na tela ---------- */
+#keyboard { position: fixed; left: 50%; bottom: 14px; z-index: 40; width: min(1120px, calc(100vw - 28px)); transform: translateX(-50%);
+  padding: 12px; display: flex; flex-direction: column; gap: 8px; border-radius: 26px;
+  background: rgba(16, 18, 32, 0.9); border: 1px solid var(--line); backdrop-filter: blur(28px) saturate(1.4);
+  box-shadow: 0 30px 80px -10px rgba(0, 0, 0, 0.75); animation: kin 0.28s var(--ease); touch-action: manipulation; }
+#keyboard.out { animation: kout 0.2s ease forwards; }
+@keyframes kin { from { opacity: 0; transform: translate(-50%, 40px); } }
+@keyframes kout { to { opacity: 0; transform: translate(-50%, 40px); } }
+.krow { display: flex; gap: 8px; }
+.key { flex: 1 1 0; height: clamp(46px, 7.2vh, 66px); border-radius: 14px; font-size: 22px; font-weight: 500; color: var(--ink);
+  background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25); transition: background 0.1s, transform 0.1s; }
+.key:active { background: rgba(139, 123, 255, 0.55); transform: scale(0.95); }
+.key.fn { font-size: 16px; color: var(--ink-2); }
+.key.accent { background: linear-gradient(135deg, #8b7bff, #5e4cf0); color: #fff; }
+body.kbd-open #status { opacity: 0; }

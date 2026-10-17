@@ -8,8 +8,9 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 /** Visualizador em tela cheia: swipe entre itens, zoom por pinça/duplo toque, apresentação automática. */
 export class Viewer {
-  constructor({ api, onClose, onToggleFullscreen }) {
+  constructor({ api, onOpen, onClose, onToggleFullscreen }) {
     this.api = api;
+    this.onOpen = onOpen;
     this.onClose = onClose;
     this.onToggleFullscreen = onToggleFullscreen;
     this.el = document.getElementById('viewer');
@@ -58,6 +59,7 @@ export class Viewer {
     this.el.classList.toggle('single', list.length < 2);
     this.show(0, rect);
     this.poke();
+    this.onOpen?.();
   }
 
   close() {
