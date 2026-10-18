@@ -438,18 +438,43 @@ const bubbles = new Bubbles({
 });
 
 function startBubbles(all, total) {
+  const dims = { width: innerWidth, height: innerHeight };
+  const bounds = { minX: 0, minY: 0, maxX: innerWidth, maxY: innerHeight };
+  els.status.textContent = statusText(all.length, total, 0);
+
+  if (bubbles.active) {
+    current = { ...current, all };
+    bubbles.update(all, dims);
+    return;
+  }
+
+  // vindo de outro layout: os tiles que estão na tela viram bolhas onde estão
   cancelMotion();
-  [...mounted.keys()].forEach(retire);
-  current = { list: [], all, pos: new Map(), labels: [], bounds: { minX: 0, minY: 0, maxX: innerWidth, maxY: innerHeight } };
+  const byId = new Map(all.map((it) => [it.id, it]));
+  const seeds = [];
+  for (const [id, el] of [...mounted]) {
+    const r = el.getBoundingClientRect();
+    const visible = r.width > 0 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight;
+    if (visible && byId.has(id)) { seeds.push({ el, item: byId.get(id), x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width }); mounted.delete(id); }
+    else retire(id);
+  }
+  current = { list: [], all, pos: new Map(), labels: [], bounds };
   renderLabels();
   view.x = 0; view.y = 0; view.k = 1;
   els.world.style.transform = 'translate(0px, 0px) scale(1)';
-  els.status.textContent = statusText(all.length, total, 0);
-  bubbles.start(all, { width: innerWidth, height: innerHeight });
+  bubbles.start(all, dims, seeds);
 }
 
+// saindo de Bolhas: cada bolha vira um tile no lugar onde está e desliza para o novo layout
 function stopBubbles() {
-  if (bubbles.active) bubbles.stop();
+  if (!bubbles.active) return;
+  for (const b of bubbles.release()) {
+    const el = b.el;
+    el.classList.remove('bubble', 'enter', 'leave');
+    el.style.transitionDelay = '';
+    setPos(el, { x: b.x, y: b.y, w: b.w, h: b.w, radius: '50%' });
+    mounted.set(b.item.id, el);
+  }
 }
 
 // Nuvem com acervo grande: troca as fotos exibidas de tempos em tempos, se ninguém está mexendo.

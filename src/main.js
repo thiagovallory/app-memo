@@ -142,8 +142,8 @@ function createWindow() {
     height: 800,
     backgroundColor: '#07080d',
     title: 'Memo',
-    fullscreen: kiosk,
-    kiosk,
+    // no macOS, passar fullscreen: false desativa a tela cheia, então a opção só entra no modo kiosk
+    ...(kiosk ? { fullscreen: true, kiosk: true } : {}),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -157,7 +157,14 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  Menu.setApplicationMenu(null);
+  // no Mac o menu é necessário para Cmd+Q e para copiar/colar no campo de busca
+  Menu.setApplicationMenu(process.platform === 'darwin'
+    ? Menu.buildFromTemplate([
+      { role: 'appMenu' },
+      { role: 'editMenu' },
+      { label: 'Visualizar', submenu: [{ role: 'togglefullscreen', label: 'Tela cheia' }] },
+    ])
+    : null);
   registerProtocol();
 
   ipcMain.handle('library:load', () => loadLibrary());
