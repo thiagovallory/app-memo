@@ -44,7 +44,7 @@ Tocar no campo de busca abre um teclado próprio (também pelo ícone de teclado
 
 ## Layouts
 
-Há quatro: **Nuvem**, **Bolhas**, **Pastas** (uma ilha por pasta) e **Mosaico**. Para criar outro, adicione um arquivo em `src/renderer/layouts/` e registre em `layouts/index.js`:
+Há quatro: **Nuvem**, **Bolhas**, **Pastas** (uma ilha por pasta; com acervos grandes mostra uma amostra de cada pasta) e **Mosaico**. Para criar outro, adicione um arquivo em `src/renderer/layouts/` e registre em `layouts/index.js`:
 
 ```js
 export default {
@@ -62,7 +62,12 @@ export default {
 ## Estrutura
 
 - `src/main.js`: janela, leitura da pasta, miniaturas em cache e protocolo `memo://` para servir os arquivos.
+- `src/exif.js`: leitura da orientação EXIF de JPEGs.
 - `src/preload.js`: ponte segura entre o app e a interface.
 - `src/renderer/`: interface (`app.js` nuvem e filtros, `viewer.js` tela cheia, `layouts/`).
 
-Miniaturas ficam em cache na pasta de dados do app; os arquivos originais nunca são alterados.
+Miniaturas ficam em cache na pasta de dados do app (PNG e JPEG são reduzidos pelo processo principal; WebP, AVIF, GIF e JPEG com rotação EXIF são reduzidos pela interface e enviados para o cache). Ao carregar a pasta, o cache de arquivos que não existem mais é limpo. Os arquivos originais nunca são alterados.
+
+## Testes
+
+`npm test` roda os testes dos layouts e da leitura de EXIF (`test/`).

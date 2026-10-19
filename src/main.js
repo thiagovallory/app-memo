@@ -4,18 +4,21 @@ const fsp = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
 const { pathToFileURL } = require('url');
+const { jpegOrientation } = require('./exif');
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.bmp']);
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.m4v', '.ogv']);
 const THUMB_SIZE = 640;
+const MAX_THUMB_BYTES = 4 * 1024 * 1024;
 
 const kiosk = process.argv.includes('--kiosk');
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'memo', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } },
+  { scheme: 'memo', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, bypassCSP: true } },
 ]);
 
 let win = null;
+const hasWin = () => !!win && !win.isDestroyed();
 let library = { root: null, files: new Map() }; // id -> absolute path
 
 const configFile = () => path.join(app.getPath('userData'), 'config.json');
@@ -60,6 +63,7 @@ async function scan(root) {
 
   await walk(root);
   library = { root, files };
+  pruneThumbs().catch(() => {});
   return items;
 }
 
@@ -70,17 +74,18 @@ async function loadLibrary() {
 }
 
 async function chooseFolder() {
-  const res = await dialog.showOpenDialog(win, {
-    title: 'Escolha a pasta com suas fotos e vídeos',
-    properties: ['openDirectory'],
-  });
+  const opts = { title: 'Escolha a pasta com suas fotos e vídeos', properties: ['openDirectory'] };
+  const res = await (hasWin() ? dialog.showOpenDialog(win, opts) : dialog.showOpenDialog(opts));
   if (res.canceled || !res.filePaths[0]) return null;
   writeConfig({ folder: res.filePaths[0] });
   return loadLibrary();
 }
 
-// Thumbnails: decoded once by the main process, cached on disk as JPEG.
+// Miniaturas: o processo principal decodifica PNG e JPEG (sem rotação EXIF) uma vez e guarda em disco como JPEG.
+// Os demais formatos (webp, avif, gif, bmp, JPEG girado por EXIF) o nativeImage não lê ou lê errado:
+// a interface gera a miniatura com o Chromium e envia por 'thumb:save'.
 const thumbJobs = new Map();
+const thumbFailed = new Set();
 let thumbActive = 0;
 const thumbWaiting = [];
 
@@ -94,16 +99,32 @@ function withThumbSlot(fn) {
   });
 }
 
+const thumbPath = (f) => path.join(thumbDir(), `${hash(f.abs + f.mtime + f.size)}.jpg`);
+
+async function canDecodeNatively(f) {
+  const ext = path.extname(f.abs).toLowerCase();
+  if (ext === '.png') return true;
+  if (ext !== '.jpg' && ext !== '.jpeg') return false;
+  const fh = await fsp.open(f.abs, 'r');
+  try {
+    const buf = Buffer.alloc(65536);
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+    return jpegOrientation(buf.subarray(0, bytesRead)) === 1;
+  } finally { await fh.close(); }
+}
+
 async function thumbFor(id) {
   const f = library.files.get(id);
   if (!f) return null;
-  const out = path.join(thumbDir(), `${hash(f.abs + f.mtime + f.size)}.jpg`);
+  const out = thumbPath(f);
   if (fs.existsSync(out)) return out;
+  if (thumbFailed.has(out)) return null;
   if (!thumbJobs.has(out)) {
     thumbJobs.set(out, withThumbSlot(async () => {
       try {
+        if (!(await canDecodeNatively(f))) { thumbFailed.add(out); return null; }
         const img = nativeImage.createFromPath(f.abs);
-        if (img.isEmpty()) return null;
+        if (img.isEmpty()) { thumbFailed.add(out); return null; }
         const { width, height } = img.getSize();
         const scale = THUMB_SIZE / Math.min(width, height);
         const small = scale < 1
@@ -112,10 +133,44 @@ async function thumbFor(id) {
         await fsp.mkdir(thumbDir(), { recursive: true });
         await fsp.writeFile(out, small.toJPEG(82));
         return out;
-      } catch { return null; } finally { thumbJobs.delete(out); }
+      } catch { thumbFailed.add(out); return null; } finally { thumbJobs.delete(out); }
     }));
   }
   return thumbJobs.get(out);
+}
+
+// miniatura gerada pela interface (ver thumbFor)
+async function saveThumb(id, data) {
+  const f = library.files.get(id);
+  if (!f || !data) return false;
+  const buf = Buffer.from(data);
+  if (buf.length < 4 || buf.length > MAX_THUMB_BYTES || buf[0] !== 0xff || buf[1] !== 0xd8) return false;
+  const out = thumbPath(f);
+  if (fs.existsSync(out)) return true;
+  await fsp.mkdir(thumbDir(), { recursive: true });
+  const tmp = `${out}.${process.pid}.tmp`;
+  await fsp.writeFile(tmp, buf);
+  await fsp.rename(tmp, out);
+  thumbFailed.delete(out);
+  return true;
+}
+
+// remove do cache as miniaturas de arquivos que não existem mais na pasta atual
+async function pruneThumbs() {
+  const keep = new Set([...library.files.values()].map((f) => path.basename(thumbPath(f))));
+  let names;
+  try { names = await fsp.readdir(thumbDir()); } catch { return; }
+  for (const n of names) {
+    if (n.endsWith('.tmp') || (n.endsWith('.jpg') && !keep.has(n))) await fsp.rm(path.join(thumbDir(), n), { force: true });
+  }
+}
+
+// a interface lê os pixels das fotos para gerar miniaturas (canvas), o que exige CORS
+async function withCors(pending) {
+  const res = await pending;
+  const headers = new Headers(res.headers);
+  headers.set('Access-Control-Allow-Origin', '*');
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
 function registerProtocol() {
@@ -125,12 +180,11 @@ function registerProtocol() {
     const f = library.files.get(id);
     if (!f) return new Response('not found', { status: 404 });
     if (kind === 'file') {
-      return net.fetch(pathToFileURL(f.abs).toString(), { headers: request.headers });
+      return withCors(net.fetch(pathToFileURL(f.abs).toString(), { headers: request.headers }));
     }
     if (kind === 'thumb') {
       const thumb = await thumbFor(id);
-      if (!thumb) return net.fetch(pathToFileURL(f.abs).toString());
-      return net.fetch(pathToFileURL(thumb).toString());
+      return withCors(net.fetch(pathToFileURL(thumb || f.abs).toString()));
     }
     return new Response('bad request', { status: 400 });
   });
@@ -154,6 +208,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.on('enter-full-screen', () => win.webContents.send('fullscreen', true));
   win.on('leave-full-screen', () => win.webContents.send('fullscreen', false));
+  win.on('closed', () => { win = null; });
 }
 
 app.whenReady().then(() => {
@@ -169,11 +224,13 @@ app.whenReady().then(() => {
 
   ipcMain.handle('library:load', () => loadLibrary());
   ipcMain.handle('library:choose', () => chooseFolder());
+  ipcMain.handle('thumb:save', (_e, id, data) => saveThumb(String(id), data).catch(() => false));
   ipcMain.handle('window:toggleFullscreen', () => {
+    if (!hasWin()) return false;
     win.setFullScreen(!win.isFullScreen());
     return win.isFullScreen();
   });
-  ipcMain.handle('window:isFullscreen', () => win.isFullScreen());
+  ipcMain.handle('window:isFullscreen', () => hasWin() && win.isFullScreen());
   ipcMain.handle('app:quit', () => app.quit());
 
   createWindow();
