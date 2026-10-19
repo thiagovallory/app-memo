@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "kiosk": "electron . --kiosk",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
     "electron": "^44.9.0",
@@ -15,9 +16,19 @@
   "build": {
     "appId": "com.thiagovallory.appmemo",
     "productName": "Memo",
-    "files": ["src/**/*", "package.json"],
-    "win": { "target": "nsis" },
-    "mac": { "target": "dmg" },
-    "linux": { "target": "AppImage" }
-  }
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "private": true
 }

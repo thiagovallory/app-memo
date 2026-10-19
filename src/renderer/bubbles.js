@@ -111,9 +111,15 @@ export class Bubbles {
     this.cursor = 0;
   }
 
+  /** Próximo item da fila que ainda não está numa bolha (só repete se não houver outro). */
   next() {
-    if (this.cursor >= this.order.length) this.shuffle();
-    return this.items[this.order[this.cursor++]];
+    const shown = new Set(this.bubbles.map((b) => b.item.id));
+    for (let n = 0; n < this.items.length; n++) {
+      if (this.cursor >= this.order.length) this.shuffle();
+      const item = this.items[this.order[this.cursor++]];
+      if (!shown.has(item.id)) return item;
+    }
+    return this.items[this.order[Math.max(0, this.cursor - 1)]];
   }
 
   radius() {

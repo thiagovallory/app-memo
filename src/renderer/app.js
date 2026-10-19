@@ -30,7 +30,7 @@ const state = {
 const els = {
   stage: $('#stage'), world: $('#world'), bar: $('#bar'), q: $('#q'), clearq: $('#clearq'),
   chips: $('#chips'), subchips: $('#subchips'), status: $('#status'), popover: $('#popover'),
-  empty: $('#empty'), welcome: $('#welcome'), loading: $('#loading'),
+  empty: $('#empty'), reset: $('#reset'), welcome: $('#welcome'), loading: $('#loading'),
 };
 
 const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -215,6 +215,7 @@ els.stage.addEventListener('pointerdown', (e) => {
     drag = { moved: 0, target: e.target, t: performance.now(), vx: 0, vy: 0, lt: performance.now() };
   } else if (pts.size === 2) {
     const [a, b] = [...pts.values()];
+    if (bubbles.active) { drag.moved = 99; return; } // bolhas ocupam a tela toda: sem zoom
     drag.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), k: view.k, c: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
     drag.moved = 99;
   }
@@ -332,13 +333,51 @@ function makeTile(it, p) {
     img.decoding = 'async';
     img.draggable = false;
     img.alt = '';
-    img.addEventListener('load', () => img.classList.add('loaded'));
+    img.crossOrigin = 'anonymous'; // permite ler os pixels para gerar a miniatura
+    img.addEventListener('load', () => { img.classList.add('loaded'); ensureThumb(img, it); });
     img.addEventListener('error', () => img.classList.add('loaded'));
     img.src = api.thumbUrl(it.id);
     face.append(img);
   }
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('enter')));
   return el;
+}
+
+// Formatos que o processo principal não consegue reduzir (webp, avif, gif, JPEG girado por EXIF) chegam
+// aqui em tamanho original: o Chromium reduz, e a miniatura vai para o cache em disco.
+const THUMB_PX = 640;
+const thumbSent = new Set();
+const thumbQueue = [];
+let thumbBusy = 0;
+
+function ensureThumb(img, it) {
+  const { naturalWidth: w, naturalHeight: h } = img;
+  if (!api.saveThumb || thumbSent.has(it.id) || Math.min(w, h) <= THUMB_PX * 1.2) return;
+  thumbSent.add(it.id);
+  thumbQueue.push({ img, it });
+  pumpThumbs();
+}
+
+function pumpThumbs() {
+  while (thumbBusy < 2 && thumbQueue.length) {
+    const { img, it } = thumbQueue.shift();
+    thumbBusy++;
+    makeThumb(img, it).catch(() => {}).finally(() => { thumbBusy--; pumpThumbs(); });
+  }
+}
+
+async function makeThumb(img, it) {
+  if (!img.isConnected) { thumbSent.delete(it.id); return; } // a bolha já saiu: tenta de novo quando voltar
+  const scale = THUMB_PX / Math.min(img.naturalWidth, img.naturalHeight);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.82));
+  if (blob) await api.saveThumb(it.id, new Uint8Array(await blob.arrayBuffer()));
 }
 
 function setPos(el, p) {
@@ -405,7 +444,9 @@ function relayout({ fit = true } = {}) {
   const all = filtered();
   const layout = layoutById(state.layout);
   const total = state.items.length;
-  els.empty.hidden = all.length > 0 || total === 0;
+  if (all.length === 0 && total > 0) showEmpty('Nada encontrado', 'Tente outra palavra ou limpe os filtros.', 'Limpar filtros', resetFilters);
+  else if (total === 0 && state.root) showEmpty('Pasta sem fotos ou vídeos', 'Não encontrei imagens (jpg, png, webp…) nem vídeos (mp4, webm, mov…) nesta pasta.', 'Trocar pasta', chooseFolder);
+  else els.empty.hidden = true;
 
   if (layout.live) { startBubbles(all, total); return; }
   stopBubbles();
@@ -422,6 +463,15 @@ function relayout({ fit = true } = {}) {
   sync();
   if (fit) animateTo(fitTarget(), mounted.size ? 1000 : 1);
   else applyView();
+}
+
+let emptyAction = null;
+function showEmpty(title, text, button, action) {
+  els.empty.querySelector('h2').textContent = title;
+  els.empty.querySelector('p').textContent = text;
+  els.reset.textContent = button;
+  emptyAction = action;
+  els.empty.hidden = false;
 }
 
 function statusText(count, total, shown) {
@@ -596,7 +646,7 @@ $('#shuffle').addEventListener('click', () => {
 });
 $('#fit').addEventListener('click', () => animateTo(fitTarget(), 800));
 $('#fs').addEventListener('click', toggleFullscreen);
-$('#reset').addEventListener('click', resetFilters);
+els.reset.addEventListener('click', () => emptyAction?.());
 $('#choose').addEventListener('click', chooseFolder);
 
 $('#menu').addEventListener('click', (e) => {
@@ -651,11 +701,6 @@ function showLibrary(lib) {
   els.welcome.hidden = !!lib.folder;
   els.bar.style.visibility = lib.folder ? '' : 'hidden';
   els.status.hidden = !lib.folder;
-  if (lib.folder && !lib.items.length) {
-    els.empty.hidden = false;
-    els.empty.querySelector('h2').textContent = 'Pasta sem fotos ou vídeos';
-    els.empty.querySelector('p').textContent = 'Não encontrei imagens (jpg, png, webp…) nem vídeos (mp4, webm, mov…) nesta pasta.';
-  }
   renderChips();
   mounted.forEach((el) => el.remove());
   mounted.clear();
@@ -664,12 +709,21 @@ function showLibrary(lib) {
 
 async function load() {
   els.loading.hidden = false;
-  showLibrary(await api.loadLibrary());
+  try {
+    showLibrary(await api.loadLibrary());
+  } catch (err) {
+    els.loading.hidden = true;
+    showEmpty('Não consegui ler a pasta', String(err?.message || err), 'Tentar de novo', load);
+  }
 }
 
 async function chooseFolder() {
-  const lib = await api.chooseFolder();
-  if (lib) showLibrary(lib);
+  try {
+    const lib = await api.chooseFolder();
+    if (lib) showLibrary(lib);
+  } catch (err) {
+    showEmpty('Não consegui ler a pasta', String(err?.message || err), 'Tentar de novo', chooseFolder);
+  }
 }
 
 async function boot() {

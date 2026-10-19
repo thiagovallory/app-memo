@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('memo', {
   chooseFolder: () => ipcRenderer.invoke('library:choose'),
   toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
   isFullscreen: () => ipcRenderer.invoke('window:isFullscreen'),
+  saveThumb: (id, data) => ipcRenderer.invoke('thumb:save', id, data),
   quit: () => ipcRenderer.invoke('app:quit'),
   onFullscreen: (cb) => ipcRenderer.on('fullscreen', (_e, on) => cb(on)),
   fileUrl: (id) => `memo://app/file/${id}`,
