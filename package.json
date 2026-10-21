@@ -7,9 +7,18 @@
     "start": "electron .",
     "kiosk": "electron . --kiosk",
     "dist": "electron-builder",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "ios:setup": "sh scripts/ios-setup.sh",
+    "ios:sync": "cap sync ios",
+    "ios:open": "cap open ios"
   },
   "devDependencies": {
+    "@capacitor-community/keep-awake": "^8.0.1",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/ios": "^8.5.3",
+    "@capacitor/status-bar": "^8.0.4",
     "electron": "^44.9.0",
     "electron-builder": "^26.15.3"
   },

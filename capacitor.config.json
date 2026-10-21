@@ -1,0 +1,15 @@
+{
+  "appId": "com.thiagovallory.appmemo",
+  "appName": "Memo",
+  "webDir": "src/renderer",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#07080d",
+    "allowsLinkPreview": false
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

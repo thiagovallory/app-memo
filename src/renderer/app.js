@@ -19,6 +19,7 @@ const store = {
 const state = {
   items: [],
   root: '',
+  hint: '',
   query: '',
   type: store.get('type', 'all'),
   folder: null,
@@ -445,7 +446,11 @@ function relayout({ fit = true } = {}) {
   const layout = layoutById(state.layout);
   const total = state.items.length;
   if (all.length === 0 && total > 0) showEmpty('Nada encontrado', 'Tente outra palavra ou limpe os filtros.', 'Limpar filtros', resetFilters);
-  else if (total === 0 && state.root) showEmpty('Pasta sem fotos ou vídeos', 'Não encontrei imagens (jpg, png, webp…) nem vídeos (mp4, webm, mov…) nesta pasta.', 'Trocar pasta', chooseFolder);
+  else if (total === 0 && state.root) {
+    const text = state.hint || 'Não encontrei imagens (jpg, png, webp…) nem vídeos (mp4, webm, mov…) nesta pasta.';
+    if (api.chooseFolder) showEmpty('Pasta sem fotos ou vídeos', text, 'Trocar pasta', chooseFolder);
+    else showEmpty('Nenhuma foto ainda', text, 'Recarregar', load);
+  }
   else els.empty.hidden = true;
 
   if (layout.live) { startBubbles(all, total); return; }
@@ -696,6 +701,7 @@ addEventListener('resize', () => {
 function showLibrary(lib) {
   els.loading.hidden = true;
   state.root = lib.folder || '';
+  state.hint = lib.hint || '';
   state.items = prepare(lib.items || []);
   state.folder = null;
   els.welcome.hidden = !!lib.folder;
@@ -732,10 +738,23 @@ async function boot() {
     document.body.insertAdjacentHTML('beforeend', '<section class="center"><h2>Abra pelo app</h2><p>Esta tela precisa do Electron: rode <code>npm start</code>.</p></section>');
     return;
   }
+  // controles que não existem em todas as plataformas (o iPad não tem seletor de pasta, tela cheia nem "sair")
+  const hide = (sel, on) => document.querySelectorAll(sel).forEach((el) => { if (on) el.hidden = true; });
+  hide('[data-act="folder"]', !api.chooseFolder);
+  hide('[data-act="quit"]', !api.quit);
+  hide('#fs, #v-fs, [data-act="fullscreen"]', api.noFullscreen);
   setLayout(state.layout);
   syncTypeButtons();
   popoverState();
   await load();
 }
+
+// volta para o app (ex.: depois de copiar fotos pelo app Arquivos): relê a pasta
+let lastShown = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !api?.reloadOnShow || viewer.isOpen || Date.now() - lastShown < 10000) return;
+  lastShown = Date.now();
+  load();
+});
 
 boot();
