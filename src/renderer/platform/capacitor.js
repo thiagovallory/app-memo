@@ -1,7 +1,6 @@
 // Ponte do app no iPad (Capacitor): oferece a mesma API que o preload.js oferece no Electron.
 // As fotos ficam em Documents/ (visível no app Arquivos do iPad) e as miniaturas em Cache/.
 import { hashSeed } from '../layouts/pack.js';
-import { createSyncStore } from './sync-store.js';
 
 const cap = window.Capacitor;
 
@@ -104,6 +103,5 @@ if (cap?.isNativePlatform?.() && !window.memo) {
       return true;
     },
     onFullscreen() {},
-    syncStore: (dir) => createSyncStore(fs, DOCS, dir),
   };
 }
