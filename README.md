@@ -29,7 +29,7 @@ npm run ios:sync     # depois de mudar algo em src/renderer
 
 No iPad não há seletor de pasta: as fotos ficam na pasta do app, que aparece em **Arquivos › No iPad › Memo**. Copie fotos e vídeos para lá (subpastas viram categorias); ao voltar para o app, ele relê a pasta. A tela fica sempre ligada e sem a barra de status. Para travar o iPad no app, use o **Acesso Guiado** (Ajustes › Acessibilidade) e deixe o Bloqueio Automático em "Nunca". Aceita também HEIC. Com conta Apple gratuita o app instalado expira em 7 dias; com a conta paga não.
 
-O código do iPad fica em `src/renderer/platform/capacitor.js` (mesma API do `preload.js`). `src/renderer/sync.js` é o motor de sincronização de uma fonte remota para a pasta (só baixa o que falta, grava em `.part` e renomeia, nunca apaga com a fonte vazia); ainda não há fonte ligada a ele.
+O código do iPad fica em `src/renderer/platform/capacitor.js` (mesma API do `preload.js`).
 
 ## Uso
 
@@ -78,8 +78,7 @@ export default {
 
 - `src/main.js`: janela, leitura da pasta, miniaturas em cache e protocolo `memo://` para servir os arquivos.
 - `src/exif.js`: leitura da orientação EXIF de JPEGs.
-- `src/renderer/platform/`: ponte do iPad (Capacitor) e pasta de destino da sincronização.
-- `src/renderer/sync.js`: motor de sincronização.
+- `src/renderer/platform/`: ponte do iPad (Capacitor).
 - `src/preload.js`: ponte segura entre o app e a interface.
 - `src/renderer/`: interface (`app.js` nuvem e filtros, `viewer.js` tela cheia, `layouts/`).
 
@@ -87,4 +86,4 @@ Miniaturas ficam em cache na pasta de dados do app (PNG e JPEG são reduzidos pe
 
 ## Testes
 
-`npm test` roda os testes dos layouts, da leitura de EXIF, da sincronização e da ponte do iPad (esta com um sistema de arquivos simulado; o app no iPad em si não é testado aqui).
+`npm test` roda os testes dos layouts, da leitura de EXIF e da ponte do iPad (esta com um sistema de arquivos simulado; o app no iPad em si não é testado aqui).
