@@ -10,7 +10,8 @@
     "test": "node --test test/*.test.mjs",
     "ios:setup": "sh scripts/ios-setup.sh",
     "ios:sync": "cap sync ios",
-    "ios:open": "cap open ios"
+    "ios:open": "cap open ios",
+    "test:web": "node test/e2e/web.mjs"
   },
   "devDependencies": {
     "@capacitor-community/keep-awake": "^8.0.1",
@@ -20,7 +21,8 @@
     "@capacitor/ios": "^8.5.3",
     "@capacitor/status-bar": "^8.0.4",
     "electron": "^44.9.0",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "playwright-core": "^1.64.1"
   },
   "build": {
     "appId": "com.thiagovallory.appmemo",

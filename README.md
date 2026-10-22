@@ -31,6 +31,23 @@ No iPad não há seletor de pasta: as fotos ficam na pasta do app, que aparece e
 
 O código do iPad fica em `src/renderer/platform/capacitor.js` (mesma API do `preload.js`).
 
+## iPad / navegador (PWA)
+
+O mesmo app roda como site instalável (PWA), sem Xcode: serve para iPads antigos que o Xcode atual não suporta, e para qualquer navegador moderno. Sem internet ele continua funcionando.
+
+**Publicar** (uma vez): em *Settings › Pages › Source*, escolha **GitHub Actions**. A cada merge no `main` o workflow `.github/workflows/pages.yml` publica `src/renderer` em `https://<usuário>.github.io/app-memo/`. Também dá para servir `src/renderer` em qualquer hospedagem estática com HTTPS (o service worker exige HTTPS, ou `localhost`).
+
+**Instalar no iPad**: abra o endereço no Safari › Compartilhar › *Adicionar à Tela de Início*. Abra pelo ícone da tela inicial (tela cheia, sem barra do Safari). Na primeira abertura a página recarrega sozinha uma vez, para o service worker assumir.
+
+**Colocar as fotos**: menu `⋯` › *Importar fotos e vídeos…* (escolha no app Fotos ou Arquivos). Os arquivos são copiados para o armazenamento do navegador e as miniaturas são geradas na hora; importar de novo o mesmo arquivo o substitui. O iPad pode não deixar escolher uma pasta inteira; então escolha vários arquivos de uma vez. *Apagar tudo do app* limpa o que foi importado (os originais no iPad não são afetados).
+
+**Limites**
+- O iOS pode apagar o armazenamento do site se faltar espaço; o app pede armazenamento persistente, mas não há garantia. Se isso acontecer, é só importar de novo.
+- A tela fica ligada com a Wake Lock API (iOS 16.4 ou mais novo); deixe também o Bloqueio Automático em "Nunca" e use o Acesso Guiado para travar no app.
+- No modo "Adicionar à Tela de Início" o iOS sempre mostra a barra de status (hora e bateria).
+- Vídeos: o Safari toca MP4 e MOV (H.264/HEVC), mas não WebM nem OGV.
+- Nos iPads mais antigos as bolhas, com desfoque e brilho, podem ficar pesadas.
+
 ## Uso
 
 | Ação | Toque | Mouse / teclado |
@@ -78,7 +95,8 @@ export default {
 
 - `src/main.js`: janela, leitura da pasta, miniaturas em cache e protocolo `memo://` para servir os arquivos.
 - `src/exif.js`: leitura da orientação EXIF de JPEGs.
-- `src/renderer/platform/`: ponte do iPad (Capacitor).
+- `src/renderer/platform/`: pontes por plataforma (`capacitor.js` no iPad nativo; `web.js` + `web-db.js` no PWA).
+- `src/renderer/sw.js`, `manifest.webmanifest`, `icons/`: service worker e manifesto do PWA.
 - `src/preload.js`: ponte segura entre o app e a interface.
 - `src/renderer/`: interface (`app.js` nuvem e filtros, `viewer.js` tela cheia, `layouts/`).
 
@@ -86,4 +104,4 @@ Miniaturas ficam em cache na pasta de dados do app (PNG e JPEG são reduzidos pe
 
 ## Testes
 
-`npm test` roda os testes dos layouts, da leitura de EXIF e da ponte do iPad (esta com um sistema de arquivos simulado; o app no iPad em si não é testado aqui).
+`npm test` roda os testes dos layouts, da leitura de EXIF e da ponte do iPad (esta com um sistema de arquivos simulado; o app no iPad em si não é testado aqui). `npm run test:web` roda o teste de ponta a ponta do PWA num Chromium real (importação, service worker, Range de vídeo, offline); use `CHROME_PATH=/caminho/do/chrome` se o Playwright não achar o navegador.

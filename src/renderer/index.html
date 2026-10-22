@@ -2,7 +2,15 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#07080d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Memo">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' memo: blob: data:; media-src 'self' memo: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
   <title>Memo</title>
   <link rel="stylesheet" href="style.css">
@@ -64,9 +72,12 @@
     <button data-sort="recent">Mais recentes</button>
     <button data-sort="name">Nome (A–Z)</button>
     <div class="pop-sep"></div>
+    <button data-act="import">Importar fotos e vídeos…</button>
+    <button data-act="importdir">Importar uma pasta…</button>
     <button data-act="folder">Trocar pasta…</button>
     <button data-act="reload">Recarregar arquivos</button>
     <button data-act="fullscreen">Tela cheia</button>
+    <button data-act="clear" class="danger">Apagar tudo do app</button>
     <button data-act="quit" class="danger">Sair do app</button>
   </div>
 
@@ -106,7 +117,9 @@
     <div class="v-progress"><i></i></div>
   </div>
 
+  <script src="platform/web-db.js"></script>
   <script type="module" src="platform/capacitor.js"></script>
+  <script type="module" src="platform/web.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

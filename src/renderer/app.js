@@ -449,6 +449,7 @@ function relayout({ fit = true } = {}) {
   else if (total === 0 && state.root) {
     const text = state.hint || 'Não encontrei imagens (jpg, png, webp…) nem vídeos (mp4, webm, mov…) nesta pasta.';
     if (api.chooseFolder) showEmpty('Pasta sem fotos ou vídeos', text, 'Trocar pasta', chooseFolder);
+    else if (api.importFiles) showEmpty('Nenhuma foto ainda', text, 'Importar fotos e vídeos', () => importFiles(false));
     else showEmpty('Nenhuma foto ainda', text, 'Recarregar', load);
   }
   else els.empty.hidden = true;
@@ -667,7 +668,10 @@ els.popover.addEventListener('click', async (e) => {
   if (b.dataset.sort) { setSort(b.dataset.sort); return; }
   els.popover.hidden = true;
   const act = b.dataset.act;
-  if (act === 'folder') await chooseFolder();
+  if (act === 'import') await importFiles(false); // o seletor de arquivos precisa abrir dentro do toque
+  else if (act === 'importdir') await importFiles(true);
+  else if (act === 'clear') await clearAll();
+  else if (act === 'folder') await chooseFolder();
   else if (act === 'reload') await load();
   else if (act === 'fullscreen') toggleFullscreen();
   else if (act === 'quit') api.quit?.();
@@ -723,6 +727,24 @@ async function load() {
   }
 }
 
+// versão web: o seletor de arquivos tem que ser chamado direto do toque, sem nenhum await antes
+async function importFiles(directory) {
+  const res = await api.importFiles({
+    directory,
+    onProgress: ({ done, total }) => { els.status.hidden = false; els.status.textContent = `Importando ${done} de ${total}…`; },
+  });
+  if (!res) return;
+  await load();
+  const note = [res.skipped && `${res.skipped} ignorados (formato não suportado)`, res.failed.length && `${res.failed.length} falharam: ${res.failed[0].error}`].filter(Boolean);
+  if (note.length) els.status.textContent += ` · ${note.join(' · ')}`;
+}
+
+async function clearAll() {
+  if (!confirm('Apagar todas as fotos e vídeos guardados neste app? Os arquivos originais no iPad não são afetados.')) return;
+  await api.clearAll();
+  await load();
+}
+
 async function chooseFolder() {
   try {
     const lib = await api.chooseFolder();
@@ -743,6 +765,8 @@ async function boot() {
   hide('[data-act="folder"]', !api.chooseFolder);
   hide('[data-act="quit"]', !api.quit);
   hide('#fs, #v-fs, [data-act="fullscreen"]', api.noFullscreen);
+  hide('[data-act="import"], [data-act="importdir"]', !api.importFiles);
+  hide('[data-act="clear"]', !api.clearAll);
   setLayout(state.layout);
   syncTypeButtons();
   popoverState();
