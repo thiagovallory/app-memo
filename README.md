@@ -43,7 +43,11 @@ O mesmo app roda como site instalável (PWA), sem Xcode: serve para iPads antigo
 
 Nada é sobrescrito sem aviso: um arquivo com o mesmo nome e tamanho que já está na pasta é ignorado ("já estavam no app"); com o mesmo nome e conteúdo diferente, entra como `nome (2)`. Os arquivos são copiados para o armazenamento do navegador e as miniaturas são geradas na hora. Os originais continuam onde estavam, intactos. No iPad, **importe pelo ícone da tela inicial**, não pelo Safari: os dois têm armazenamentos separados.
 
-**Organizar** (menu `⋯` › *Organizar fotos e pastas…*): a aba *Pastas* lista cada pasta com a contagem e deixa renomear (inclusive juntar duas pastas ou criar subpastas) e excluir; a aba *Fotos* mostra as miniaturas, deixa tocar para selecionar várias e então *Mover…* para outra pasta ou *Excluir*. Isso só apaga as cópias guardadas no app; *Apagar tudo do app* limpa tudo.
+**Fotos grandes e espaço:** ao importar, cada foto é decodificada uma vez, **reduzida para no máximo 2560 px no maior lado** (JPEG; GIF e WebP ficam como estão) e já ganha a miniatura. Fotos de câmera têm vários MB e deixam um iPad antigo lento e o armazenamento do navegador cheio (o Safari limita o espaço de cada site); para uma tela de parede, 2560 px continuam nítidos. Se o espaço acabar no meio da importação, o app avisa com um diálogo e para: o que já entrou fica, e importar de novo reconhece o que já está lá. Os originais continuam intactos no aparelho.
+
+**Organizar** (menu `⋯` › *Organizar fotos e pastas…*): no topo da aba *Pastas* aparece o espaço usado e o botão **Otimizar** (reduz as fotos importadas antes desta versão e cria as miniaturas que faltam). A aba *Pastas* lista cada pasta com a contagem e deixa renomear (inclusive juntar duas pastas ou criar subpastas) e excluir; a aba *Fotos* mostra as miniaturas, deixa tocar para selecionar várias e então *Mover…* para outra pasta ou *Excluir*. Isso só apaga as cópias guardadas no app; *Apagar tudo do app* limpa tudo.
+
+**Efeitos** (menu `⋯`): *reduzidos* tira o desfoque animado, as sombras grandes e a mistura de cores e usa menos bolhas. Na primeira abertura o app mede a fluidez e liga sozinho se ficar abaixo de 30 quadros por segundo; dá para mudar à mão.
 
 **Modo exposição** (para o iPad fixo na parede): menu `⋯` › *Modo exposição* esconde o menu `⋯` (sem importar, apagar, trocar pasta ou sair). Para voltar, **segure o logo "memo" por 2 segundos**. Vale também no desktop e no iPad nativo.
 

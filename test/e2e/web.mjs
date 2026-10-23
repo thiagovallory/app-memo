@@ -47,8 +47,9 @@ const files = [
 ];
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--no-sandbox'] });
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
 const page = await ctx.newPage();
+await page.addInitScript(() => { try { localStorage.setItem('fx', 'full'); } catch {} }); // sem a medição automática de efeitos
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 
@@ -125,6 +126,28 @@ await page.evaluate(() => {
 await dlg('Arrastadas');
 ok(await until(async () => (await metas()).some((m) => m.rel === 'Arrastadas/arrastada.png')), 'arrastar arquivos para a janela importa');
 
+// foto grande: é reduzida na importação (maior lado 2560 px), com miniatura pronta e o tamanho original guardado
+const grande = png(3200, 2400, [40, 90, 200]);
+await importVia([{ name: 'grande.png', mimeType: 'image/png', buffer: grande }], 'Grandes');
+ok(await until(async () => (await metas()).some((m) => m.rel === 'Grandes/grande.png')), 'importa foto grande');
+const gm = (await metas()).find((m) => m.rel === 'Grandes/grande.png');
+const dims = await page.evaluate(async (id) => { const b = await memoDb.getBlob('blobs', id); const bmp = await createImageBitmap(b); return { w: bmp.width, h: bmp.height, type: b.type }; }, gm.id);
+ok(dims.type === 'image/jpeg' && Math.max(dims.w, dims.h) === 2560, `foto de 3200 px é guardada com 2560 px em JPEG (${dims.w}x${dims.h})`);
+ok(gm.origSize === grande.length && gm.opt === 1, 'guarda o tamanho original para reconhecer repetidos');
+ok((await page.evaluate(() => memoDb.listThumbIds())).includes(gm.id), 'a miniatura já nasce na importação');
+await importVia([{ name: 'grande.png', mimeType: 'image/png', buffer: grande }], 'Grandes');
+await waitStatus(/já estava/);
+ok((await metas()).filter((m) => m.rel.startsWith('Grandes/')).length === 1, 'importar a mesma foto grande de novo é reconhecido como repetida');
+
+// otimizar o que entrou sem otimização (ex.: versões antigas do app): grava direto no banco, sem passar pela importação
+await page.evaluate(async (bytes) => {
+  const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' });
+  await memoDb.putFile({ id: 'antiga1', rel: 'Antigas/velha.png', name: 'velha', ext: 'png', type: 'image', folder: 'Antigas', mtime: 1, size: blob.size }, blob);
+}, [...png(3000, 2000, [200, 100, 50])]);
+await page.click('#menu');
+await page.click('[data-act="reload"]');
+ok(await until(async () => (await page.evaluate(() => window.memo.manage ? true : false))), 'API de organizar disponível');
+
 const thumbs = async () => (await page.evaluate(() => memoDb.listThumbIds())).length;
 for (let i = 0; i < 60 && (await thumbs()) < 6; i++) await page.waitForTimeout(500);
 ok((await thumbs()) >= 6, 'miniaturas geradas pela interface e guardadas');
@@ -160,7 +183,45 @@ await ctx.setOffline(false);
 
 await page.click('#menu');
 ok(await page.locator('[data-act="import"]').isVisible() && !(await page.locator('[data-act="folder"]').isVisible()), 'menu mostra importar e esconde "Trocar pasta"');
+// efeitos reduzidos (iPads antigos): liga e desliga pelo menu e persiste
+await page.click('[data-act="fx"]');
+ok(await page.evaluate(() => document.body.classList.contains('lite') && localStorage.getItem('fx') === 'lite'), 'menu liga os efeitos reduzidos');
+await page.click('#menu');
+ok((await page.locator('[data-act="fx"]').innerText()).includes('reduzidos'), 'o item do menu mostra o estado atual');
+await page.click('[data-act="fx"]');
+ok(await page.evaluate(() => !document.body.classList.contains('lite') && localStorage.getItem('fx') === 'full'), 'menu volta aos efeitos completos');
+
+// visualizador: o toque/clique não faz os botões "aparecerem e sumirem"
+await page.click('#layouts button[data-id="grid"]');
+await page.waitForTimeout(1200);
+await page.locator('.tile').first().click();
+await page.waitForSelector('#viewer:not([hidden])');
+await page.waitForTimeout(500);
+const idle = () => page.evaluate(() => document.getElementById('viewer').classList.contains('idle'));
+ok(!(await idle()), 'visualizador abre com os botões visíveis');
+await page.waitForFunction(() => document.getElementById('viewer').classList.contains('idle'), null, { timeout: 8000 });
+await page.mouse.move(640, 400);
+await page.mouse.down(); await page.mouse.up();
+await page.waitForTimeout(250);
+const afterClick = await idle();
+await page.waitForTimeout(900);
+ok(!afterClick && !(await idle()), 'clique com o mouse na foto mostra os botões e eles não somem logo em seguida');
+// toque (iPad): mostra quando escondidos e esconde quando visíveis, sem piscar
+await page.touchscreen.tap(640, 400);
+await page.waitForTimeout(250);
+const t1 = await idle();
+await page.waitForTimeout(700);
+ok(t1 === true && (await idle()) === true, 'toque na foto com os botões visíveis os esconde (e eles não voltam sozinhos)');
+await page.touchscreen.tap(640, 400);
+await page.waitForTimeout(250);
+const t2 = await idle();
+await page.waitForTimeout(700);
+ok(t2 === false && (await idle()) === false, 'toque na foto com os botões escondidos os mostra (e eles ficam)');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(500);
+
 // modo exposição: o menu some e só volta segurando o logo por 2 s
+await page.click('#menu');
 await page.click('[data-act="expo"]');
 await dlg(true);
 ok(!(await page.locator('#menu').isVisible()), 'modo exposição esconde o menu ⋯');
@@ -179,13 +240,25 @@ ok(await page.locator('#menu').isVisible(), 'segurar o logo por 2 s volta o menu
 // organizar: pastas e fotos
 await menu('manage');
 await page.waitForSelector('#manage:not([hidden])');
-ok((await page.locator('#manage .m-row').count()) === 3, 'Organizar lista as pastas (Viagem, Natal, Arrastadas)');
+ok((await page.locator('#manage .m-row').count()) === 5, 'Organizar lista as pastas (Viagem, Natal, Arrastadas, Grandes, Antigas)');
 const rowOf = (name) => page.locator('#manage .m-row', { has: page.locator('b', { hasText: new RegExp(`^${name}$`) }) });
 await rowOf('Natal').getByText('Renomear').click();
 await dlg('Festas/Natal');
 ok(await until(async () => (await metas()).filter((m) => m.folder === 'Festas/Natal').length === 2), 'renomear pasta move as fotos (subpasta Festas/Natal)');
 const thumbsAfter = await page.evaluate(async () => { const m = (await memoDb.listMeta()).find((x) => x.folder === 'Festas/Natal'); return !!(await memoDb.getBlob('blobs', m.id)); });
 ok(thumbsAfter, 'o arquivo continua acessível depois de mudar de pasta');
+
+ok(await page.locator('#manage .m-store').isVisible(), 'Organizar mostra o armazenamento');
+const otim = page.locator('#manage .m-store .pill');
+ok(await otim.count() === 1 && /Otimizar 1 foto/.test(await otim.innerText()), 'oferece otimizar as fotos que ainda não foram');
+await otim.click();
+await dlg(true);   // confirma
+await page.waitForSelector('.dlg');
+ok((await page.locator('.dlg-card h3').innerText()) === 'Pronto', 'otimizar termina com um resumo');
+await dlg(true);
+const velha = (await metas()).find((m) => m.rel === 'Antigas/velha.png');
+ok(velha.opt === 1 && velha.origSize > 0 && (await page.evaluate(() => memoDb.listThumbIds())).includes('antiga1'), 'otimizar marca a foto, guarda o tamanho original e cria a miniatura');
+ok((await page.locator('#manage .m-store .pill').count()) === 0, 'depois de otimizar, o botão some');
 
 await page.click('#manage .seg button[data-tab="photos"]');
 await page.selectOption('#manage select', 'Festas/Natal');

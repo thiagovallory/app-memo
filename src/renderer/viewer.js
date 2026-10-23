@@ -137,18 +137,25 @@ export class Viewer {
     } else {
       const img = document.createElement('img');
       img.draggable = false;
-      img.className = 'pending';
-      img.src = this.api.thumbUrl(it.id);
       img.alt = it.name;
       slide.appendChild(img);
-      const full = new Image();
-      full.onload = () => {
-        if (!slide.isConnected) return;
-        img.src = full.src;
-        img.classList.remove('pending');
-      };
-      full.onerror = () => img.classList.remove('pending');
-      full.src = this.api.fileUrl(it.id);
+      const thumb = this.api.thumbUrl(it.id);
+      const fileUrl = this.api.fileUrl(it.id);
+      if (thumb === fileUrl) {
+        img.src = fileUrl; // sem miniatura separada: carrega o original uma vez só (não duas)
+      } else {
+        // mostra a miniatura (borrada) enquanto a foto inteira carrega
+        img.className = 'pending';
+        img.src = thumb;
+        const full = new Image();
+        full.onload = () => {
+          if (!slide.isConnected) return;
+          img.src = full.src;
+          img.classList.remove('pending');
+        };
+        full.onerror = () => img.classList.remove('pending');
+        full.src = fileUrl;
+      }
     }
     return slide;
   }
@@ -229,7 +236,7 @@ export class Viewer {
   }
 
   down(e) {
-    this.poke();
+    // não mostra a interface aqui: quem decide é o toque (tap), senão ela aparece ao apertar e some ao soltar
     const video = this.slide?.querySelector('video');
     if (video && e.target === video) {
       const r = video.getBoundingClientRect();
@@ -334,9 +341,10 @@ export class Viewer {
       this.poke();
       return;
     }
-    // toque em área vazia ou na imagem alterna a interface
+    // toque na imagem alterna a interface. Com o mouse, ela já aparece ao mexer o ponteiro (e some sozinha
+    // depois de uns segundos), então o clique só a mostra quando estiver escondida, nunca a esconde.
     if (this.el.classList.contains('idle')) this.poke();
-    else { clearTimeout(this.idleTimer); this.el.classList.add('idle'); }
+    else if (e.pointerType !== 'mouse') { clearTimeout(this.idleTimer); this.el.classList.add('idle'); }
   }
 
   dblclick(e) {

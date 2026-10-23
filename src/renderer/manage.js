@@ -3,6 +3,8 @@ import { cleanFolder } from './platform/folder-name.js';
 
 const PAGE = 120;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const fmtBytes = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${Math.round(n / 1e6)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
+const optimizable = (it) => it.type === 'image' && !it.opt && it.ext !== 'gif' && it.ext !== 'webp';
 const label = (folder) => (folder === '' ? 'Soltas' : folder.split('/').join(' › '));
 
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" class="ico"><path d="m6 6 12 12M18 6 6 18"/></svg>';
@@ -103,9 +105,64 @@ export class Manager {
     this.renderBar();
   }
 
+  // espaço usado pelo app e o botão que reduz as fotos grandes
+  renderStorage() {
+    const items = this.getItems();
+    const box = document.createElement('div');
+    box.className = 'm-store';
+    const total = items.reduce((sum, it) => sum + (it.size || 0), 0);
+    const info = document.createElement('div');
+    info.innerHTML = '<b></b><small></small>';
+    info.querySelector('b').textContent = `${plural(items.length, 'memória', 'memórias')} · ${fmtBytes(total)} no app`;
+    const small = info.querySelector('small');
+    small.textContent = 'Fotos grandes deixam o iPad lento e enchem o armazenamento do navegador.';
+    box.append(info);
+    this.api.manage.storage?.().then((s) => {
+      if (s) small.textContent = `O navegador está usando ${fmtBytes(s.usage)} de ${fmtBytes(s.quota)} permitidos. ${small.textContent}`;
+    });
+
+    const todo = items.filter(optimizable);
+    this.progress = document.createElement('small');
+    this.progress.className = 'm-progress';
+    if (todo.length) {
+      const btn = this.button(`Otimizar ${plural(todo.length, 'foto', 'fotos')}`, '', () => this.optimize(todo.length, btn));
+      box.append(btn);
+    }
+    box.append(this.progress);
+    return box;
+  }
+
+  async optimize(count, btn) {
+    const ok = await dialog({
+      title: `Otimizar ${plural(count, 'foto', 'fotos')}?`,
+      text: 'Reduz as fotos grandes (até 2560 px no maior lado) e cria miniaturas. O app fica mais rápido e usa menos espaço. Pode levar alguns minutos: deixe esta tela aberta. Os originais no seu aparelho não são afetados.',
+      ok: 'Otimizar',
+    });
+    if (!ok) return;
+    btn.disabled = true;
+    let result = null;
+    try {
+      result = await this.api.manage.optimize({
+        onProgress: ({ done, total }) => { this.progress.textContent = `Otimizando ${done} de ${total}…`; },
+      });
+    } catch (err) {
+      await dialog({ title: 'Não deu certo', text: String(err?.message || err), ok: 'OK', cancel: 'Fechar' });
+    }
+    await this.reload();
+    this.render();
+    if (result) {
+      await dialog({
+        title: 'Pronto',
+        text: `${plural(result.done, 'foto otimizada', 'fotos otimizadas')}, ${fmtBytes(result.saved)} a menos.${result.failed ? `\n${plural(result.failed, 'não pôde', 'não puderam')} ser otimizada${result.failed === 1 ? '' : 's'} e ficou como estava.` : ''}`,
+        ok: 'OK', cancel: 'Fechar',
+      });
+    }
+  }
+
   renderFolders() {
     const list = this.folders();
     if (!list.length) { this.body.append(this.note('Nenhuma foto ainda. Importe fotos pelo menu ⋯.')); return; }
+    this.body.append(this.renderStorage());
     const box = document.createElement('div');
     box.className = 'm-list';
     for (const [folder, count] of list) {

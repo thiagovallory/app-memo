@@ -247,6 +247,15 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
   background: rgba(22, 24, 40, 0.95); border-top: 1px solid var(--line); }
 .m-count { margin-right: auto; font-size: 16px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
+/* organizar: armazenamento */
+.m-store { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; max-width: 760px; margin: 0 auto 14px; padding: 14px 16px; border-radius: 20px; background: rgba(139, 123, 255, 0.1); border: 1px solid rgba(139, 123, 255, 0.35); }
+.m-store b { display: block; font-size: 17px; }
+.m-store small { display: block; margin-top: 3px; color: var(--ink-2); font-size: 13.5px; line-height: 1.4; }
+.m-store .pill { height: 44px; padding: 0 18px; font-size: 15px; }
+.m-store .pill:disabled { opacity: 0.5; }
+.m-store .m-progress { flex-basis: 100%; margin: 0; color: var(--accent-2); }
+.m-store > div { min-width: 0; flex: 1 1 260px; }
+
 /* ---------- modo exposição: esconde o menu ⋯ (importar, apagar, trocar pasta, sair) ---------- */
 body.expo #menu, body.expo #popover { display: none !important; }
 .brand { touch-action: manipulation; -webkit-touch-callout: none; }
@@ -279,3 +288,19 @@ body.kbd-open #status { opacity: 0; }
 .dlg-actions .pill { height: 48px; padding: 0 24px; }
 .pill.ghost { background: var(--glass-2); box-shadow: none; color: var(--ink); }
 .pill.danger { background: linear-gradient(135deg, #ff6b81, #d6336c); box-shadow: 0 12px 34px -10px rgba(255, 107, 129, 0.8); }
+
+/* ---------- efeitos reduzidos (iPads antigos): sem desfoque pesado, animações contínuas, sombras grandes nem mistura de cores ---------- */
+body.lite #bg i { filter: none; animation: none; opacity: 1; }
+body.lite #bg i:nth-child(1) { background: radial-gradient(closest-side, rgba(91, 72, 255, 0.5), rgba(91, 72, 255, 0)); }
+body.lite #bg i:nth-child(2) { background: radial-gradient(closest-side, rgba(20, 184, 166, 0.38), rgba(20, 184, 166, 0)); }
+body.lite #bg i:nth-child(3) { background: radial-gradient(closest-side, rgba(255, 79, 154, 0.22), rgba(255, 79, 154, 0)); }
+body.lite .tile .float { animation: none; }
+body.lite .tile .face { box-shadow: none; transition: none; }
+body.lite .tile.bubble { will-change: auto; }
+body.lite .tile.bubble .face::after { mix-blend-mode: normal; }
+body.lite .v-backdrop { filter: none; background-image: none !important; }
+body.lite .v-backdrop::after { display: none; }
+body.lite #viewer, body.lite .dlg, body.lite #manage { animation: none; }
+body.lite .slide img, body.lite .slide video { box-shadow: none; }
+body.lite .slide.anim { transition-duration: 0.25s; }
+body.lite .search, body.lite .seg, body.lite .round, body.lite .chip, body.lite #popover { background-color: rgba(20, 22, 36, 0.92); }
