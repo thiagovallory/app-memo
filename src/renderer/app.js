@@ -307,6 +307,15 @@ function handleTap(target) {
 const mounted = new Map(); // id -> element
 let labelEls = [];
 
+// camadas que só aparecem quando o tile vira bolha (ver o CSS): o filme colorido e a borda fina
+function addFilm(face) {
+  for (const cls of ['film', 'film2', 'rim']) {
+    const i = document.createElement('i');
+    i.className = cls;
+    face.append(i);
+  }
+}
+
 function makeTile(it, p) {
   // (também usada pelas bolhas)
   const rand = rng(hashSeed(it.id));
@@ -316,6 +325,7 @@ function makeTile(it, p) {
   el.style.setProperty('--h', hashSeed(it.rel) % 360);
   el.style.setProperty('--bob', (7 + rand() * 7).toFixed(1) + 's');
   el.style.setProperty('--delay', (-rand() * 12).toFixed(1) + 's');
+  el.style.setProperty('--spin', Math.round(rand() * 360) + 'deg'); // onde começam as cores do filme da bolha: cada uma é diferente
   setPos(el, p);
 
   const float = document.createElement('div');
@@ -331,6 +341,7 @@ function makeTile(it, p) {
     v.src = api.fileUrl(it.id) + '#t=0.1';
     v.addEventListener('loadeddata', () => v.classList.add('loaded'));
     face.append(v);
+    addFilm(face);
     const play = document.createElement('div');
     play.className = 'play';
     play.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg>';
@@ -345,6 +356,7 @@ function makeTile(it, p) {
     img.addEventListener('error', () => img.classList.add('loaded'));
     img.src = api.thumbUrl(it.id);
     face.append(img);
+    addFilm(face);
   }
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('enter')));
   return el;
