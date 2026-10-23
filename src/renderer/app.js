@@ -28,6 +28,7 @@ const state = {
   layout: 'bubbles', // sempre abre em bolhas
   sort: store.get('sort', 'shuffle'),
   expo: store.get('expo', '') === '1', // modo exposição: sem o menu ⋯
+  fx: store.get('fx', ''),              // efeitos: '' = automático (mede a fluidez), 'full' ou 'lite'
   seed: (Math.random() * 1e9) | 0,
 };
 
@@ -567,6 +568,42 @@ function setSort(sort) {
 
 function popoverState() {
   els.popover.querySelectorAll('[data-sort]').forEach((b) => b.classList.toggle('on', b.dataset.sort === state.sort));
+  const fx = els.popover.querySelector('[data-act="fx"]');
+  if (fx) fx.textContent = state.fx === 'lite' ? 'Efeitos: reduzidos (mais rápido)' : 'Efeitos: completos';
+}
+
+// Efeitos reduzidos: sem desfoque animado, sombras grandes nem mistura de cores, e menos bolhas.
+// Em iPads antigos isso decide entre fluido e travando.
+function applyFx() {
+  const lite = state.fx === 'lite';
+  document.body.classList.toggle('lite', lite);
+  bubbles.maxCount = lite ? 24 : 70;
+  popoverState();
+}
+
+function setFx(fx) {
+  state.fx = fx;
+  store.set('fx', fx);
+  applyFx();
+  if (state.layout === 'bubbles') relayout();
+}
+
+// mede os quadros por segundo por alguns instantes; se estiver muito baixo, liga os efeitos reduzidos
+function autoFx(ms = 3500) {
+  if (state.fx || document.hidden) return;
+  let frames = 0;
+  const t0 = performance.now();
+  const tick = (now) => {
+    if (document.hidden || state.fx) return; // aba em segundo plano mede errado: tenta de novo na próxima abertura
+    frames++;
+    if (now - t0 < ms) { requestAnimationFrame(tick); return; }
+    const fps = (frames * 1000) / (now - t0);
+    if (fps < 30) {
+      setFx('lite');
+      els.status.textContent += ' · efeitos reduzidos para ficar mais fluido (menu ⋯ para mudar)';
+    }
+  };
+  requestAnimationFrame(tick);
 }
 
 function setExpo(on) {
@@ -705,6 +742,7 @@ els.popover.addEventListener('click', async (e) => {
     if (ok) setExpo(true);
   }
   else if (act === 'manage') manager?.open('folders');
+  else if (act === 'fx') setFx(state.fx === 'lite' ? 'full' : 'lite');
   else if (act === 'quit') api.quit?.();
 });
 
@@ -783,6 +821,16 @@ async function runImport({ directory = false, entries = null } = {}) {
     res.failed.length && `${res.failed.length} falharam: ${res.failed[0].error}`,
   ].filter(Boolean);
   els.status.textContent += ` · ${note.join(' · ') || 'nada para importar'}`;
+  if (res.failed.length) {
+    const quota = res.failed.some((f) => f.quota);
+    await dialog({
+      title: quota ? 'Sem espaço para guardar tudo' : 'Algumas fotos não foram importadas',
+      text: (quota
+        ? `${plural(res.added, 'foto foi importada', 'fotos foram importadas')} e o armazenamento do navegador encheu. Para liberar espaço: abra Organizar › Otimizar (reduz as fotos), exclua o que não precisa ou libere espaço no aparelho em Ajustes › Geral › Armazenamento. Depois importe de novo: o que já está no app é reconhecido e não duplica.`
+        : `${plural(res.failed.length, 'arquivo falhou', 'arquivos falharam')}: ${res.failed.slice(0, 3).map((f) => `${f.name} (${f.error})`).join('; ')}`),
+      ok: 'Entendi', cancel: 'Fechar',
+    });
+  }
 }
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -823,10 +871,12 @@ async function boot() {
   hide('[data-act="manage"]', !api.manage);
   if (api.manage) manager = new Manager({ api, getItems: () => state.items, reload: load });
   document.body.classList.toggle('expo', state.expo);
+  applyFx();
   setLayout(state.layout);
   syncTypeButtons();
   popoverState();
   await load();
+  setTimeout(autoFx, 1500); // depois que as primeiras bolhas já estão se mexendo
 }
 
 // arrastar fotos e pastas para a janela (computador); ignora no modo exposição

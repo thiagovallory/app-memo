@@ -18,6 +18,7 @@ export class Bubbles {
     this.running = false;
     this.paused = false;
     this.rand = rng((Math.random() * 1e9) | 0);
+    this.maxCount = 70;         // menos bolhas em aparelhos lentos (modo de efeitos reduzidos)
   }
 
   get active() { return this.running; }
@@ -28,7 +29,7 @@ export class Bubbles {
     this.H = height;
     this.scale = clamp(Math.min(width, height) / 800, 0.8, 1.7);
     const meanR = 62 * this.scale;
-    const cap = clamp(Math.round((width * height * 0.36) / (Math.PI * meanR * meanR)), 3, 70);
+    const cap = clamp(Math.round((width * height * 0.36) / (Math.PI * meanR * meanR)), 3, this.maxCount);
     this.count = Math.min(items.length, cap);
     // com poucas fotos, bolhas maiores
     this.grow = clamp(Math.sqrt(cap / Math.max(1, this.count)), 1, 1.8);

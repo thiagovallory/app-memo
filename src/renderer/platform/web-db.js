@@ -15,7 +15,7 @@
   const done = (tx) => new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error('transação cancelada'));
+    tx.onabort = () => reject(tx.error || new Error('gravação cancelada (talvez sem espaço)'));
   });
 
   function open() {
@@ -35,12 +35,14 @@
     return dbPromise;
   }
 
-  async function putFile(meta, blob) {
+  // grava (ou substitui) um arquivo; a miniatura vem junto, na mesma transação. Sem miniatura, a antiga é descartada.
+  async function putFile(meta, blob, thumb) {
     const db = await open();
     const tx = db.transaction(['meta', 'blobs', 'thumbs'], 'readwrite');
     tx.objectStore('meta').put(meta);
     tx.objectStore('blobs').put(blob, meta.id);
-    tx.objectStore('thumbs').delete(meta.id); // arquivo novo: a miniatura antiga não vale mais
+    if (thumb) tx.objectStore('thumbs').put(thumb, meta.id);
+    else tx.objectStore('thumbs').delete(meta.id);
     await done(tx);
   }
 

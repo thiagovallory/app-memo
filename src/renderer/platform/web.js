@@ -4,6 +4,7 @@
 import { hashSeed } from '../layouts/pack.js';
 import { cleanFolder } from './folder-name.js';
 import { collectDropped } from './drop.js';
+import { prepareImage, keepsOriginal } from './image-prep.js';
 
 const db = globalThis.memoDb;
 
@@ -127,7 +128,7 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
       for (const m of metas) versions.set(m.id, m.mtime);
       thumbs.clear();
       for (const id of await db.listThumbIds()) thumbs.add(id);
-      const items = metas.map(({ id, type, name, ext, rel, folder, mtime }) => ({ id, type, name, ext, rel, folder, mtime }));
+      const items = metas.map(({ id, type, name, ext, rel, folder, mtime, size, opt }) => ({ id, type, name, ext, rel, folder, mtime, size, opt }));
       return { folder: 'Memo', items, hint: this.hint };
     },
 
@@ -166,10 +167,11 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
 
       const existing = await db.listMeta();
       const taken = new Set(existing.map((m) => m.rel.toLowerCase()));
-      const sizes = new Map(existing.map((m) => [m.rel.toLowerCase(), m.size]));
+      const sizes = new Map(existing.map((m) => [m.rel.toLowerCase(), m.origSize ?? m.size])); // tamanho do arquivo original
 
       const result = { added: 0, duplicates: 0, skipped: 0, failed: [] };
       let n = 0;
+      let streak = 0; // falhas seguidas: com o armazenamento cheio, para em vez de tentar o resto
       for (const { file, rel: given } of picked) {
         onProgress?.({ done: n++, total: picked.length });
         const { stem, ext } = splitName(file.name);
@@ -180,17 +182,26 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
         if (sizes.get(rel.toLowerCase()) === file.size) { result.duplicates++; continue; }
         rel = uniqueRel(rel, taken);
         try {
+          // fotos: reduz o que for grande e já gera a miniatura (um único decode); se o navegador não abrir, guarda como veio
+          let blob = file;
+          let thumb = null;
+          let opt = 0; // 1 = otimizada; 2 = o navegador não abriu a imagem (fica como veio e não é oferecida de novo)
+          if (type === 'image') {
+            try { ({ blob, thumb } = await prepareImage(file, ext)); opt = 1; } catch { opt = 2; }
+          }
           await db.putFile({
             id: idFor(rel), rel, name: rel.slice(rel.lastIndexOf('/') + 1).replace(/\.[^.]*$/, '') || stem, ext, type,
             folder: rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '',
-            mtime: file.lastModified || Date.now(), size: file.size,
-          }, file);
+            mtime: file.lastModified || Date.now(), size: blob.size, origSize: file.size, opt,
+          }, blob, thumb);
           taken.add(rel.toLowerCase());
           sizes.set(rel.toLowerCase(), file.size);
           result.added++;
+          streak = 0;
         } catch (err) {
-          result.failed.push({ name: file.name, error: String(err?.name === 'QuotaExceededError' ? 'sem espaço no iPad' : err?.message || err) });
-          if (err?.name === 'QuotaExceededError') break;
+          const quota = err?.name === 'QuotaExceededError' || /quota|space|espaço/i.test(String(err?.message));
+          result.failed.push({ name: file.name, error: quota ? 'sem espaço no armazenamento do navegador' : String(err?.message || err), quota });
+          if (quota || ++streak >= 3) break;
         }
       }
       onProgress?.({ done: picked.length, total: picked.length });
@@ -199,6 +210,35 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
 
     // organizar o que foi importado (só existe aqui: nas outras versões os arquivos são os seus originais)
     manage: {
+      // reduz as fotos que entraram antes (ou sem otimizar) e gera as miniaturas que faltam
+      async optimize({ onProgress } = {}) {
+        await startup;
+        const todo = (await db.listMeta()).filter((m) => m.type === 'image' && !m.opt && !keepsOriginal(m.ext));
+        const result = { done: 0, failed: 0, saved: 0, total: todo.length };
+        let n = 0;
+        for (const m of todo) {
+          onProgress?.({ done: n++, total: todo.length });
+          try {
+            const original = await db.getBlob('blobs', m.id);
+            const { blob, thumb } = await prepareImage(original, m.ext);
+            await db.putFile({ ...m, opt: 1, origSize: m.origSize ?? m.size, size: blob.size }, blob, thumb);
+            result.saved += Math.max(0, m.size - blob.size);
+            result.done++;
+          } catch {
+            result.failed++;
+            await db.putFile({ ...m, opt: 2 }, await db.getBlob('blobs', m.id), null).catch(() => {});
+          }
+        }
+        onProgress?.({ done: todo.length, total: todo.length });
+        return result;
+      },
+      // espaço usado e disponível, quando o navegador informa (Safari 17 ou mais novo)
+      async storage() {
+        try {
+          const { usage, quota } = await navigator.storage.estimate();
+          return usage && quota ? { usage, quota } : null;
+        } catch { return null; }
+      },
       async moveItems(ids, folder) {
         const want = new Set(ids);
         const items = (await db.listMeta()).filter((m) => want.has(m.id));
