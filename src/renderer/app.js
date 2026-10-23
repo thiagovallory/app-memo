@@ -3,6 +3,8 @@ import { hashSeed, rng } from './layouts/pack.js';
 import { Viewer } from './viewer.js';
 import { Bubbles } from './bubbles.js';
 import { Keyboard } from './keyboard.js';
+import { dialog } from './dialog.js';
+import { Manager } from './manage.js';
 
 const api = window.memo;
 const $ = (sel) => document.querySelector(sel);
@@ -450,7 +452,7 @@ function relayout({ fit = true } = {}) {
   else if (total === 0 && state.root) {
     const text = state.hint || 'Não encontrei imagens (jpg, png, webp…) nem vídeos (mp4, webm, mov…) nesta pasta.';
     if (api.chooseFolder) showEmpty('Pasta sem fotos ou vídeos', text, 'Trocar pasta', chooseFolder);
-    else if (api.importFiles) showEmpty('Nenhuma foto ainda', text, 'Importar fotos e vídeos', () => importFiles(false));
+    else if (api.importFiles) showEmpty('Nenhuma foto ainda', text, 'Importar fotos e vídeos', () => runImport({ directory: false }));
     else showEmpty('Nenhuma foto ainda', text, 'Recarregar', load);
   }
   else els.empty.hidden = true;
@@ -607,6 +609,8 @@ async function toggleFullscreen() {
   return document.documentElement.requestFullscreen();
 }
 
+let manager = null; // tela "Organizar" (só quando a plataforma deixa organizar)
+
 const viewer = new Viewer({
   api,
   onOpen: () => { bubbles.pause(true); keyboard.hide(); },
@@ -686,15 +690,21 @@ els.popover.addEventListener('click', async (e) => {
   if (b.dataset.sort) { setSort(b.dataset.sort); return; }
   els.popover.hidden = true;
   const act = b.dataset.act;
-  if (act === 'import') await importFiles(false); // o seletor de arquivos precisa abrir dentro do toque
-  else if (act === 'importdir') await importFiles(true);
+  if (act === 'import') await runImport({ directory: false }); // o seletor de arquivos precisa abrir dentro do toque
+  else if (act === 'importdir') await runImport({ directory: true });
   else if (act === 'clear') await clearAll();
   else if (act === 'folder') await chooseFolder();
   else if (act === 'reload') await load();
   else if (act === 'fullscreen') toggleFullscreen();
   else if (act === 'expo') {
-    if (confirm('Ativar o modo exposição?\n\nO menu ⋯ some (sem importar, apagar ou trocar pasta). Para voltar, segure o logo "memo" por 2 segundos.')) setExpo(true);
+    const ok = await dialog({
+      title: 'Ativar o modo exposição?',
+      text: 'O menu ⋯ some (sem importar, organizar, apagar ou trocar pasta).\n\nPara voltar, segure o logo "memo" por 2 segundos.',
+      ok: 'Ativar',
+    });
+    if (ok) setExpo(true);
   }
+  else if (act === 'manage') manager?.open('folders');
   else if (act === 'quit') api.quit?.();
 });
 
@@ -707,7 +717,7 @@ for (const row of [els.chips, els.subchips]) {
 
 document.addEventListener('keydown', (e) => {
   noteActivity();
-  if (viewer.isOpen) return;
+  if (viewer.isOpen || manager?.isOpen) return;
   const typing = document.activeElement === els.q;
   if (e.key === 'Escape') { els.popover.hidden = true; els.q.blur(); keyboard.hide(); }
   else if (!typing && (e.key === 'F11' || e.key === 'f')) { e.preventDefault(); toggleFullscreen(); }
@@ -749,21 +759,41 @@ async function load() {
 }
 
 // versão web: o seletor de arquivos tem que ser chamado direto do toque, sem nenhum await antes
-async function importFiles(directory) {
+async function runImport({ directory = false, entries = null } = {}) {
   const res = await api.importFiles({
     directory,
+    entries,
     // o seletor do iPad não informa a pasta de origem: pergunta em qual categoria colocar
-    askFolder: async (n) => prompt(`Importar ${n} ${n === 1 ? 'arquivo' : 'arquivos'}.\n\nEm qual pasta (categoria) colocar? Deixe vazio para "Soltas".`, ''),
+    askFolder: (n) => dialog({
+      title: `Importar ${n} ${n === 1 ? 'arquivo' : 'arquivos'}`,
+      text: 'Em qual pasta (categoria) colocar? Deixe vazio para "Soltas".',
+      input: { value: '', placeholder: 'Soltas' },
+      suggestions: [...new Set(state.items.map((it) => it.folder).filter(Boolean))].sort().slice(0, 12),
+      ok: 'Importar',
+    }),
     onProgress: ({ done, total }) => { els.status.hidden = false; els.status.textContent = `Importando ${done} de ${total}…`; },
   });
   if (!res) return;
   await load();
-  const note = [res.skipped && `${res.skipped} ignorados (formato não suportado)`, res.failed.length && `${res.failed.length} falharam: ${res.failed[0].error}`].filter(Boolean);
-  if (note.length) els.status.textContent += ` · ${note.join(' · ')}`;
+  manager?.isOpen && manager.render();
+  const note = [
+    res.added && `${plural(res.added, 'nova', 'novas')}`,
+    res.duplicates && `${plural(res.duplicates, 'já estava no app', 'já estavam no app')}`,
+    res.skipped && `${res.skipped} ignorados (formato não suportado)`,
+    res.failed.length && `${res.failed.length} falharam: ${res.failed[0].error}`,
+  ].filter(Boolean);
+  els.status.textContent += ` · ${note.join(' · ') || 'nada para importar'}`;
 }
 
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
 async function clearAll() {
-  if (!confirm('Apagar todas as fotos e vídeos guardados neste app? Os arquivos originais no iPad não são afetados.')) return;
+  const ok = await dialog({
+    title: 'Apagar tudo do app?',
+    text: 'Todas as fotos e vídeos guardados neste app serão apagados. Os arquivos originais no seu aparelho não são afetados.',
+    ok: 'Apagar tudo', danger: true,
+  });
+  if (!ok) return;
   await api.clearAll();
   await load();
 }
@@ -790,12 +820,17 @@ async function boot() {
   hide('#fs, #v-fs, [data-act="fullscreen"]', api.noFullscreen);
   hide('[data-act="import"], [data-act="importdir"]', !api.importFiles);
   hide('[data-act="clear"]', !api.clearAll);
+  hide('[data-act="manage"]', !api.manage);
+  if (api.manage) manager = new Manager({ api, getItems: () => state.items, reload: load });
   document.body.classList.toggle('expo', state.expo);
   setLayout(state.layout);
   syncTypeButtons();
   popoverState();
   await load();
 }
+
+// arrastar fotos e pastas para a janela (computador); ignora no modo exposição
+document.addEventListener('memo:drop', (e) => { if (!state.expo) runImport({ entries: e.detail }); });
 
 // volta para o app (ex.: depois de copiar fotos pelo app Arquivos): relê a pasta
 let lastShown = 0;
