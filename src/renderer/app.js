@@ -292,6 +292,8 @@ els.stage.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 function handleTap(target) {
+  // modo exposição: tudo escondido; tocar numa área vazia mostra a busca e os filtros por uns segundos
+  if (state.expo && !target.closest?.('.tile') && !target.closest?.('.label')) { showUi(); return; }
   const label = target.closest?.('.label');
   if (label) { setFolder(label.dataset.folder === '' ? ROOT : label.dataset.folder); return; }
   const tile = target.closest?.('.tile');
@@ -576,7 +578,7 @@ function popoverState() {
 // Em iPads antigos isso decide entre fluido e travando.
 function applyFx() {
   const lite = state.fx === 'lite';
-  document.body.classList.toggle('lite', lite);
+  document.documentElement.classList.toggle('lite', lite);
   bubbles.maxCount = lite ? 24 : 70;
   popoverState();
 }
@@ -609,9 +611,24 @@ function autoFx(ms = 3500) {
 function setExpo(on) {
   state.expo = on;
   store.set('expo', on ? '1' : '');
-  document.body.classList.toggle('expo', on);
+  document.documentElement.classList.toggle('expo', on);
+  document.documentElement.classList.remove('show-ui');
+  clearTimeout(uiTimer);
   els.popover.hidden = true;
 }
+
+// modo exposição: mostra a barra por alguns segundos (ela espera enquanto a busca está em uso)
+let uiTimer;
+function showUi() {
+  if (!state.expo) return;
+  document.documentElement.classList.add('show-ui');
+  clearTimeout(uiTimer);
+  uiTimer = setTimeout(function hide() {
+    if (keyboard.visible || document.activeElement === els.q) { uiTimer = setTimeout(hide, 4000); return; }
+    document.documentElement.classList.remove('show-ui');
+  }, 10000);
+}
+for (const ev of ['pointerdown', 'keydown', 'input']) els.bar.addEventListener(ev, showUi);
 
 // segurar o logo por 2 s sai do modo exposição
 let expoTimer;
@@ -705,10 +722,6 @@ layoutBox.addEventListener('click', (e) => {
   if (b) setLayout(b.dataset.id);
 });
 
-$('#shuffle').addEventListener('click', () => {
-  state.seed = (Math.random() * 1e9) | 0;
-  if (state.sort !== 'shuffle') setSort('shuffle'); else relayout();
-});
 $('#fit').addEventListener('click', () => animateTo(fitTarget(), 800));
 $('#fs').addEventListener('click', toggleFullscreen);
 els.reset.addEventListener('click', () => emptyAction?.());
@@ -736,7 +749,7 @@ els.popover.addEventListener('click', async (e) => {
   else if (act === 'expo') {
     const ok = await dialog({
       title: 'Ativar o modo exposição?',
-      text: 'O menu ⋯ some (sem importar, organizar, apagar ou trocar pasta).\n\nPara voltar, segure o logo "memo" por 2 segundos.',
+      text: 'A barra de cima some (busca, filtros, botões e o menu ⋯), então ninguém muda nada sem querer.\n\nTocar numa área vazia da tela mostra a busca e os filtros por uns segundos. Para sair do modo exposição, mostre a barra e segure o logo "memo" por 2 segundos.',
       ok: 'Ativar',
     });
     if (ok) setExpo(true);
@@ -771,12 +784,15 @@ addEventListener('resize', () => {
 
 // ---------------------------------------------------------------- carregar biblioteca
 
-function showLibrary(lib) {
+function showLibrary(lib, { keepFolder = false } = {}) {
   els.loading.hidden = true;
   state.root = lib.folder || '';
   state.hint = lib.hint || '';
   state.items = prepare(lib.items || []);
-  state.folder = null;
+  // depois de organizar ou importar, continua na pasta escolhida se ela ainda existir
+  const f = state.folder;
+  const stillThere = keepFolder && f != null && state.items.some((it) => (f === ROOT ? it.folder === '' : it.folder === f || it.folder.startsWith(f + '/')));
+  state.folder = stillThere ? f : null;
   els.welcome.hidden = !!lib.folder;
   els.bar.style.visibility = lib.folder ? '' : 'hidden';
   els.status.hidden = !lib.folder;
@@ -786,10 +802,10 @@ function showLibrary(lib) {
   relayout();
 }
 
-async function load() {
+async function load({ keepFolder = false } = {}) {
   els.loading.hidden = false;
   try {
-    showLibrary(await api.loadLibrary());
+    showLibrary(await api.loadLibrary(), { keepFolder });
   } catch (err) {
     els.loading.hidden = true;
     showEmpty('Não consegui ler a pasta', String(err?.message || err), 'Tentar de novo', load);
@@ -804,7 +820,7 @@ async function runImport({ directory = false, entries = null } = {}) {
     // o seletor do iPad não informa a pasta de origem: pergunta em qual categoria colocar
     askFolder: (n) => dialog({
       title: `Importar ${n} ${n === 1 ? 'arquivo' : 'arquivos'}`,
-      text: 'Em qual pasta (categoria) colocar? Deixe vazio para "Soltas".',
+      text: 'Em qual pasta (categoria) colocar? Deixe vazio para "Soltas". Para uma subpasta, use barra: Viagens/Praia.',
       input: { value: '', placeholder: 'Soltas' },
       suggestions: [...new Set(state.items.map((it) => it.folder).filter(Boolean))].sort().slice(0, 12),
       ok: 'Importar',
@@ -812,7 +828,7 @@ async function runImport({ directory = false, entries = null } = {}) {
     onProgress: ({ done, total }) => { els.status.hidden = false; els.status.textContent = `Importando ${done} de ${total}…`; },
   });
   if (!res) return;
-  await load();
+  await load({ keepFolder: true });
   manager?.isOpen && manager.render();
   const note = [
     res.added && `${plural(res.added, 'nova', 'novas')}`,
@@ -869,8 +885,8 @@ async function boot() {
   hide('[data-act="import"], [data-act="importdir"]', !api.importFiles);
   hide('[data-act="clear"]', !api.clearAll);
   hide('[data-act="manage"]', !api.manage);
-  if (api.manage) manager = new Manager({ api, getItems: () => state.items, reload: load });
-  document.body.classList.toggle('expo', state.expo);
+  if (api.manage) manager = new Manager({ api, getItems: () => state.items, reload: () => load({ keepFolder: true }) });
+  document.documentElement.classList.toggle('expo', state.expo);
   applyFx();
   setLayout(state.layout);
   syncTypeButtons();

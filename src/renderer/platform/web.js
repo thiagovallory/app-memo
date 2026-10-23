@@ -18,6 +18,13 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
 
   // 64 bits (duas sementes): com milhares de fotos, 32 bits colidiriam
   const idFor = (rel) => hashSeed(rel).toString(36) + hashSeed([...rel].reverse().join('')).toString(36);
+  // o id nasce do caminho na importação e fica fixo ao mover; se já estiver em uso, tenta variações
+  const uniqueId = (rel, used) => {
+    let id = idFor(rel);
+    for (let n = 2; used.has(id); n++) id = idFor(`${rel}#${n}`);
+    used.add(id);
+    return id;
+  };
   const splitName = (rel) => {
     const base = rel.slice(rel.lastIndexOf('/') + 1);
     const dot = base.lastIndexOf('.');
@@ -98,22 +105,22 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
     if (entries.length) document.dispatchEvent(new CustomEvent('memo:drop', { detail: entries }));
   });
 
-  // muda arquivos de pasta (ou de nome, se já existir um igual lá)
+  // muda arquivos de pasta (ou de nome, se já existir um igual lá): só atualiza os dados, sem copiar as fotos
   async function relocate(items, folderFor) {
     const all = await db.listMeta();
     const leaving = new Set(items.map((m) => m.id));
     const taken = new Set(all.filter((m) => !leaving.has(m.id)).map((m) => m.rel.toLowerCase()));
-    let moved = 0;
+    const changed = [];
     for (const m of items) {
       const folder = cleanFolder(folderFor(m));
       const base = m.rel.slice(m.rel.lastIndexOf('/') + 1);
       const rel = uniqueRel(folder ? `${folder}/${base}` : base, taken);
       taken.add(rel.toLowerCase());
       if (rel === m.rel) continue;
-      await db.moveFile(m.id, { ...m, id: idFor(rel), rel, folder: rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '' });
-      moved++;
+      changed.push({ ...m, rel, folder: rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '' });
     }
-    return moved;
+    if (changed.length) await db.updateMeta(changed);
+    return changed.length;
   }
   const inFolder = (m, folder) => m.folder === folder || m.folder.startsWith(folder + '/');
 
@@ -167,6 +174,7 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
 
       const existing = await db.listMeta();
       const taken = new Set(existing.map((m) => m.rel.toLowerCase()));
+      const usedIds = new Set(existing.map((m) => m.id));
       const sizes = new Map(existing.map((m) => [m.rel.toLowerCase(), m.origSize ?? m.size])); // tamanho do arquivo original
 
       const result = { added: 0, duplicates: 0, skipped: 0, failed: [] };
@@ -190,7 +198,7 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
             try { ({ blob, thumb } = await prepareImage(file, ext)); opt = 1; } catch { opt = 2; }
           }
           await db.putFile({
-            id: idFor(rel), rel, name: rel.slice(rel.lastIndexOf('/') + 1).replace(/\.[^.]*$/, '') || stem, ext, type,
+            id: uniqueId(rel, usedIds), rel, name: rel.slice(rel.lastIndexOf('/') + 1).replace(/\.[^.]*$/, '') || stem, ext, type,
             folder: rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '',
             mtime: file.lastModified || Date.now(), size: blob.size, origSize: file.size, opt,
           }, blob, thumb);

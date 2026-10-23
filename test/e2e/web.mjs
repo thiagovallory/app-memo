@@ -177,19 +177,20 @@ ok(true, 'as fotos continuam depois de recarregar');
 await ctx.setOffline(true);
 await page.reload();
 await page.waitForFunction(() => document.querySelectorAll('.tile').length >= 5, null, { timeout: 15000 });
-const loaded = await page.evaluate(() => [...document.querySelectorAll('.tile img')].filter((i) => i.complete && i.naturalWidth > 0).length);
-ok(loaded >= 5, `offline: o app abre e as imagens carregam (${loaded})`);
+const loadedImgs = () => page.evaluate(() => [...document.querySelectorAll('.tile img')].filter((i) => i.complete && i.naturalWidth > 0).length);
+const okOffline = await until(async () => (await loadedImgs()) >= 5, 8000);
+ok(okOffline, `offline: o app abre e as imagens carregam (${await loadedImgs()})`);
 await ctx.setOffline(false);
 
 await page.click('#menu');
 ok(await page.locator('[data-act="import"]').isVisible() && !(await page.locator('[data-act="folder"]').isVisible()), 'menu mostra importar e esconde "Trocar pasta"');
 // efeitos reduzidos (iPads antigos): liga e desliga pelo menu e persiste
 await page.click('[data-act="fx"]');
-ok(await page.evaluate(() => document.body.classList.contains('lite') && localStorage.getItem('fx') === 'lite'), 'menu liga os efeitos reduzidos');
+ok(await page.evaluate(() => document.documentElement.classList.contains('lite') && localStorage.getItem('fx') === 'lite'), 'menu liga os efeitos reduzidos');
 await page.click('#menu');
 ok((await page.locator('[data-act="fx"]').innerText()).includes('reduzidos'), 'o item do menu mostra o estado atual');
 await page.click('[data-act="fx"]');
-ok(await page.evaluate(() => !document.body.classList.contains('lite') && localStorage.getItem('fx') === 'full'), 'menu volta aos efeitos completos');
+ok(await page.evaluate(() => !document.documentElement.classList.contains('lite') && localStorage.getItem('fx') === 'full'), 'menu volta aos efeitos completos');
 
 // visualizador: o toque/clique não faz os botões "aparecerem e sumirem"
 await page.click('#layouts button[data-id="grid"]');
@@ -220,31 +221,79 @@ ok(t2 === false && (await idle()) === false, 'toque na foto com os botões escon
 await page.keyboard.press('Escape');
 await page.waitForTimeout(500);
 
-// modo exposição: o menu some e só volta segurando o logo por 2 s
+// modo exposição: tudo some; tocar numa área vazia mostra a busca e os filtros; segurar o logo (2 s) sai
+const barOpacity = () => page.evaluate(() => getComputedStyle(document.getElementById('bar')).opacity);
+const barIs = (v) => until(async () => (await barOpacity()) === v, 3000); // a barra aparece e some com uma animação curta
+// um ponto da tela que não seja bolha, rótulo nem barra
+const emptyPoint = () => page.evaluate(() => {
+  for (let y = 140; y < innerHeight - 10; y += 23) for (let x = 12; x < innerWidth - 10; x += 29) {
+    const el = document.elementFromPoint(x, y);
+    if (el && !el.closest('.tile, .label, #bar, #popover, #viewer, #manage, .dlg, #keyboard')) return { x, y };
+  }
+  return null;
+});
 await page.click('#menu');
 await page.click('[data-act="expo"]');
 await dlg(true);
-ok(!(await page.locator('#menu').isVisible()), 'modo exposição esconde o menu ⋯');
+ok((await barIs('0')) && (await page.evaluate(() => getComputedStyle(document.getElementById('status')).opacity)) === '0', 'modo exposição esconde a barra e o contador');
 await page.reload();
 await page.waitForFunction(() => document.querySelectorAll('.tile').length >= 5, null, { timeout: 15000 });
-ok(!(await page.locator('#menu').isVisible()), 'o modo exposição continua depois de recarregar');
+ok((await page.evaluate(() => getComputedStyle(document.getElementById('bar')).opacity)) === '0', 'o modo exposição já abre com tudo escondido (sem piscar a barra)');
+
+await page.click('#layouts button[data-id="cloud"]', { force: true }).catch(() => {}); // a barra está escondida: o clique não passa
+const pt = await emptyPoint();
+ok(!!pt, 'há uma área vazia para tocar');
+await page.mouse.click(pt.x, pt.y);
+ok((await barIs('1')) && !(await page.locator('#menu').isVisible()), 'tocar numa área vazia mostra a barra (sem o menu ⋯)');
+await page.locator('#q').click();
+await page.keyboard.type('foto');
+await page.waitForTimeout(400);
+ok((await page.locator('#status').innerText()).length > 0, 'a busca funciona com a barra mostrada');
+await page.fill('#q', '');
+await page.locator('#q').blur();
+
 const logo = await page.locator('.brand').boundingBox();
 await page.mouse.move(logo.x + 10, logo.y + 10);
 await page.mouse.down();
 await page.waitForTimeout(800);
-ok(!(await page.locator('#menu').isVisible()), 'toque curto no logo não sai do modo exposição');
+ok(await page.evaluate(() => document.documentElement.classList.contains('expo')), 'toque curto no logo não sai do modo exposição');
 await page.waitForTimeout(1500);
 await page.mouse.up();
-ok(await page.locator('#menu').isVisible(), 'segurar o logo por 2 s volta o menu');
+ok(await page.evaluate(() => !document.documentElement.classList.contains('expo')) && (await page.locator('#menu').isVisible()) && (await barIs('1')), 'segurar o logo por 2 s sai do modo exposição e volta tudo');
+
+ok((await page.locator('#shuffle').count()) === 0, 'o botão de embaralhar foi removido');
 
 // organizar: pastas e fotos
+await page.locator('#chips .chip', { hasText: 'Arrastadas' }).click(); // a tela principal fica filtrada em Arrastadas
 await menu('manage');
 await page.waitForSelector('#manage:not([hidden])');
 ok((await page.locator('#manage .m-row').count()) === 5, 'Organizar lista as pastas (Viagem, Natal, Arrastadas, Grandes, Antigas)');
 const rowOf = (name) => page.locator('#manage .m-row', { has: page.locator('b', { hasText: new RegExp(`^${name}$`) }) });
+const idsNatal = (await metas()).filter((m) => m.folder === 'Natal').map((m) => m.id).sort();
+await page.locator('#manage .m-tip').waitFor();
+ok((await page.locator('#manage .m-tip').innerText()).includes('Viagens/Praia'), 'a dica de subpastas aparece em Organizar');
 await rowOf('Natal').getByText('Renomear').click();
+await page.waitForSelector('.dlg');
+ok((await page.locator('.dlg-card p').innerText()).includes('dentro de outra'), 'o diálogo de renomear explica como criar subpastas');
+ok((await page.locator('.dlg-chips .chip', { hasText: 'Dentro de "Viagem"' }).count()) === 1, 'oferece atalhos "Dentro de ..." para as pastas existentes');
+await page.locator('.dlg-chips .chip', { hasText: 'Dentro de "Viagem"' }).click();
+ok((await page.inputValue('.dlg input')) === 'Viagem/Natal', 'o atalho preenche o caminho com barra');
 await dlg('Festas/Natal');
 ok(await until(async () => (await metas()).filter((m) => m.folder === 'Festas/Natal').length === 2), 'renomear pasta move as fotos (subpasta Festas/Natal)');
+ok(JSON.stringify((await metas()).filter((m) => m.folder === 'Festas/Natal').map((m) => m.id).sort()) === JSON.stringify(idsNatal), 'mudar de pasta não copia nada: os ids continuam os mesmos');
+ok(await page.evaluate(() => document.querySelector('#chips .chip.on')?.textContent.includes('Arrastadas')), 'depois de organizar, a tela principal continua na pasta escolhida');
+
+// tirar de dentro da subpasta pelo atalho e voltar
+await rowOf('Festas › Natal').getByText('Renomear').click();
+await page.waitForSelector('.dlg');
+await page.locator('.dlg-chips .chip', { hasText: 'Tirar de dentro de "Festas"' }).click();
+ok((await page.inputValue('.dlg input')) === 'Natal', 'o atalho "Tirar de dentro" deixa só o nome da pasta');
+await dlg(true);
+ok(await until(async () => (await metas()).filter((m) => m.folder === 'Natal').length === 2), 'tirar a pasta de dentro da subpasta funciona');
+ok(await until(async () => (await page.locator('#chips').innerText()).includes('Natal') && !(await page.locator('#chips').innerText()).includes('Festas')), 'a tela principal já mostra a mudança, sem recarregar à mão');
+await rowOf('Natal').getByText('Renomear').click();
+await dlg('Festas/Natal');
+ok(await until(async () => (await metas()).filter((m) => m.folder === 'Festas/Natal').length === 2), 'volta para a subpasta');
 const thumbsAfter = await page.evaluate(async () => { const m = (await memoDb.listMeta()).find((x) => x.folder === 'Festas/Natal'); return !!(await memoDb.getBlob('blobs', m.id)); });
 ok(thumbsAfter, 'o arquivo continua acessível depois de mudar de pasta');
 
@@ -277,6 +326,7 @@ ok((await metas()).some((m) => m.folder === 'Arrastadas'), 'cancelar a exclusão
 await page.click('#manage [data-do="delete"]');
 await dlg(true);
 ok(await until(async () => (await metas()).every((m) => m.folder !== 'Arrastadas')), 'excluir fotos selecionadas');
+ok(await until(async () => (await page.evaluate(() => document.querySelector('#chips .chip.on')?.textContent || '')).startsWith('Todas')), 'se a pasta filtrada deixa de existir, volta para "Todas"');
 
 await page.click('#manage .seg button[data-tab="folders"]');
 const nViagem = (await metas()).filter((m) => m.folder === 'Viagem' || m.folder.startsWith('Viagem/')).length;

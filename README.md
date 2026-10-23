@@ -49,7 +49,7 @@ Nada é sobrescrito sem aviso: um arquivo com o mesmo nome e tamanho que já est
 
 **Efeitos** (menu `⋯`): *reduzidos* tira o desfoque animado, as sombras grandes e a mistura de cores e usa menos bolhas. Na primeira abertura o app mede a fluidez e liga sozinho se ficar abaixo de 30 quadros por segundo; dá para mudar à mão.
 
-**Modo exposição** (para o iPad fixo na parede): menu `⋯` › *Modo exposição* esconde o menu `⋯` (sem importar, apagar, trocar pasta ou sair). Para voltar, **segure o logo "memo" por 2 segundos**. Vale também no desktop e no iPad nativo.
+**Modo exposição** (para o iPad fixo na parede): menu `⋯` › *Modo exposição* **esconde tudo** (barra de cima, busca, filtros, botões, o menu `⋯` e o contador), então ninguém muda nada sem querer. **Tocar numa área vazia da tela** mostra a busca e os filtros por uns segundos (o menu `⋯` continua escondido); tocar numa bolha abre a foto como sempre. Para sair, mostre a barra e **segure o logo "memo" por 2 segundos**. Vale também no computador e no iPad nativo.
 
 **Limites**
 - O iOS pode apagar o armazenamento do site se faltar espaço; o app pede armazenamento persistente, mas não há garantia. Se isso acontecer, é só importar de novo.
@@ -77,7 +77,7 @@ Formatos: fotos `jpg jpeg png gif webp avif bmp`; vídeos `mp4 webm mov m4v ogv`
 
 ## Muitas fotos
 
-- **Nuvem** se adapta ao tamanho do acervo: com poucas fotos as bolhas crescem, com muitas encolhem até preencher a tela. Quando passam do que cabe (cerca de 70 a 160, conforme o monitor), mostra um sorteio e troca as fotos sozinha a cada 30 s se ninguém estiver mexendo. O botão embaralhar sorteia outras na hora.
+- **Nuvem** se adapta ao tamanho do acervo: com poucas fotos as bolhas crescem, com muitas encolhem até preencher a tela. Quando passam do que cabe (cerca de 70 a 160, conforme o monitor), mostra um sorteio e troca as fotos sozinha a cada 30 s se ninguém estiver mexendo.
 - **Bolhas** (o app sempre abre nele): bolhas de sabão sobem pela tela e, ao sair por qualquer lado, entram outras por baixo ou pelas laterais, então o acervo todo vai passando. Dá para empurrá-las com o dedo ou mouse, e tocar abre a foto.
 
 ## Teclado na tela

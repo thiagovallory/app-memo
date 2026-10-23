@@ -70,19 +70,12 @@
     return !!meta;
   }
 
-  // muda um arquivo de lugar: o id vem do caminho, então blob e miniatura passam para a chave nova
-  async function moveFile(oldId, meta) {
+  // atualiza só os dados de um arquivo (pasta, nome, etc.); o conteúdo e a miniatura não são tocados.
+  // Mudar de pasta é instantâneo porque o id é fixo: ele nasce do caminho da importação e nunca mais muda.
+  async function updateMeta(metas) {
     const db = await open();
-    const tx = db.transaction(['meta', 'blobs', 'thumbs'], 'readwrite');
-    const blob = await wrap(tx.objectStore('blobs').get(oldId));
-    const thumb = await wrap(tx.objectStore('thumbs').get(oldId));
-    if (blob === undefined) { tx.abort(); throw new Error('arquivo não encontrado'); }
-    if (oldId !== meta.id) {
-      for (const s of ['meta', 'blobs', 'thumbs']) tx.objectStore(s).delete(oldId);
-    }
-    tx.objectStore('meta').put(meta);
-    tx.objectStore('blobs').put(blob, meta.id);
-    if (thumb !== undefined) tx.objectStore('thumbs').put(thumb, meta.id);
+    const tx = db.transaction('meta', 'readwrite');
+    for (const meta of metas) tx.objectStore('meta').put(meta);
     await done(tx);
   }
 
@@ -100,5 +93,5 @@
     await done(tx);
   }
 
-  root.memoDb = { open, putFile, listMeta, listThumbIds, getBlob, putThumb, moveFile, deleteFiles, clearAll };
+  root.memoDb = { open, putFile, listMeta, listThumbIds, getBlob, putThumb, updateMeta, deleteFiles, clearAll };
 })(typeof self !== 'undefined' ? self : globalThis);
