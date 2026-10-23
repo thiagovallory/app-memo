@@ -163,6 +163,10 @@ export class Manager {
     const list = this.folders();
     if (!list.length) { this.body.append(this.note('Nenhuma foto ainda. Importe fotos pelo menu ⋯.')); return; }
     this.body.append(this.renderStorage());
+    const tip = document.createElement('p');
+    tip.className = 'm-tip';
+    tip.innerHTML = '<b>Dica:</b> para colocar uma pasta <em>dentro</em> de outra, toque em <b>Renomear</b> e escreva o caminho com barra, por exemplo <code>Viagens/Praia</code>. Para tirá-la de dentro, apague a parte antes da barra. O mesmo vale ao <b>Mover…</b> fotos.';
+    this.body.append(tip);
     const box = document.createElement('div');
     box.className = 'm-list';
     for (const [folder, count] of list) {
@@ -274,12 +278,17 @@ export class Manager {
 
   // ---------- ações ----------
   async run(action) {
+    const busy = document.createElement('div');
+    busy.className = 'm-busy';
+    busy.innerHTML = '<div class="spinner"></div><span>Aplicando…</span>';
+    this.el.append(busy);
     try {
       await action();
     } catch (err) {
+      busy.remove();
       await dialog({ title: 'Não deu certo', text: String(err?.message || err), ok: 'OK', cancel: 'Fechar' });
     }
-    await this.reload();
+    try { await this.reload(); } finally { busy.remove(); }
     // a pasta filtrada pode ter deixado de existir
     if (this.filter !== null && !this.getItems().some((it) => it.folder === this.filter)) this.filter = null;
     this.selected.clear();
@@ -287,10 +296,17 @@ export class Manager {
   }
 
   async renameFolder(folder) {
+    const leaf = folder.split('/').pop();
+    const parent = folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : '';
+    const others = this.folders().map(([f]) => f).filter((f) => f && f !== folder && !f.startsWith(folder + '/') && f !== parent);
     const answer = await dialog({
       title: `Renomear "${label(folder)}"`,
-      text: 'Se já existir uma pasta com esse nome, as fotos se juntam a ela. Deixe vazio para mandar tudo para "Soltas".',
+      text: 'Para colocar esta pasta dentro de outra, escreva o caminho com barra (Viagens/Praia); para tirá-la de dentro, apague o que vem antes da última barra. Se já existir uma pasta com esse nome, as fotos se juntam a ela. Vazio manda tudo para "Soltas".',
       input: { value: folder, placeholder: 'Nome da pasta' },
+      suggestions: [
+        ...(parent ? [{ label: `Tirar de dentro de "${parent}"`, value: leaf }] : []),
+        ...others.slice(0, 10).map((f) => ({ label: `Dentro de "${f}"`, value: `${f}/${leaf}` })),
+      ],
       ok: 'Renomear',
     });
     if (answer === null) return;
@@ -313,7 +329,7 @@ export class Manager {
     if (!ids.length) return;
     const answer = await dialog({
       title: `Mover ${plural(ids.length, 'item', 'itens')}`,
-      text: 'Para qual pasta? Escolha uma existente ou digite um nome novo. Vazio = "Soltas".',
+      text: 'Para qual pasta? Escolha uma existente ou digite um nome novo (use barra para subpasta: Viagens/Praia). Vazio = "Soltas".',
       input: { value: '', placeholder: 'Nome da pasta' },
       suggestions: this.folders().map(([f]) => f).filter((f) => f !== '').slice(0, 12),
       ok: 'Mover',

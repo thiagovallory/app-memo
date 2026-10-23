@@ -35,11 +35,12 @@ export function dialog({ title, text = '', ok = 'OK', cancel = 'Cancelar', dange
         const row = document.createElement('div');
         row.className = 'dlg-chips';
         for (const s of suggestions) {
+          const item = typeof s === 'string' ? { label: s, value: s } : s; // texto simples ou { label, value }
           const b = document.createElement('button');
           b.type = 'button';
           b.className = 'chip';
-          b.textContent = s;
-          b.addEventListener('click', () => { field.value = s; field.focus(); });
+          b.textContent = item.label;
+          b.addEventListener('click', () => { field.value = item.value; field.focus(); });
           row.append(b);
         }
         card.append(row);
