@@ -52,6 +52,10 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 
+// um único tratador de diálogos: o prompt de pasta recebe "Viagem"; os confirm são aceitos
+const dialogs = [];
+page.on('dialog', (d) => { dialogs.push(d.type()); return d.type() === 'prompt' ? d.accept('Viagem') : d.accept(); });
+
 let failed = 0;
 const ok = (cond, msg) => { console.log(cond ? 'ok  ' : 'FAIL', msg); if (!cond) failed++; };
 const eachTile = () => page.evaluate(() => document.querySelectorAll('.tile').length);
@@ -66,6 +70,10 @@ await chooser.setFiles(files);
 await page.waitForFunction(() => document.querySelectorAll('.tile').length >= 5, null, { timeout: 20000 });
 const status = await page.locator('#status').innerText();
 ok(/\d+ memórias/.test(status) && /1 ignorados/.test(status), `importou e ignorou o .txt (${status})`);
+
+ok(dialogs[0] === 'prompt', 'sem pasta de origem (iPad), o app pergunta em qual pasta colocar');
+ok((await page.evaluate(() => memoDb.listMeta())).every((m) => m.folder === 'Viagem' && m.rel.startsWith('Viagem/')), 'os arquivos entram na pasta digitada');
+ok((await page.locator('#chips').innerText()).includes('Viagem'), 'a pasta aparece nos filtros do topo');
 
 const thumbs = async () => (await page.evaluate(() => memoDb.listThumbIds())).length;
 for (let i = 0; i < 60 && (await thumbs()) < 6; i++) await page.waitForTimeout(500);
@@ -102,7 +110,23 @@ await ctx.setOffline(false);
 
 await page.click('#menu');
 ok(await page.locator('[data-act="import"]').isVisible() && !(await page.locator('[data-act="folder"]').isVisible()), 'menu mostra importar e esconde "Trocar pasta"');
-page.once('dialog', (d) => d.accept());
+// modo exposição: o menu some e só volta segurando o logo por 2 s
+await page.click('[data-act="expo"]');
+await page.waitForTimeout(200);
+ok(!(await page.locator('#menu').isVisible()), 'modo exposição esconde o menu ⋯');
+await page.reload();
+await page.waitForFunction(() => document.querySelectorAll('.tile').length >= 5, null, { timeout: 15000 });
+ok(!(await page.locator('#menu').isVisible()), 'o modo exposição continua depois de recarregar');
+const logo = await page.locator('.brand').boundingBox();
+await page.mouse.move(logo.x + 10, logo.y + 10);
+await page.mouse.down();
+await page.waitForTimeout(800);
+ok(!(await page.locator('#menu').isVisible()), 'toque curto no logo não sai do modo exposição');
+await page.waitForTimeout(1500);
+await page.mouse.up();
+ok(await page.locator('#menu').isVisible(), 'segurar o logo por 2 s volta o menu');
+
+await page.click('#menu');
 await page.click('[data-act="clear"]');
 await page.waitForSelector('#empty:not([hidden])');
 await page.waitForFunction(() => document.querySelectorAll('.tile').length === 0, null, { timeout: 5000 }).catch(() => {}); // as bolhas saem com uma animação

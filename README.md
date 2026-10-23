@@ -39,7 +39,9 @@ O mesmo app roda como site instalável (PWA), sem Xcode: serve para iPads antigo
 
 **Instalar no iPad**: abra o endereço no Safari › Compartilhar › *Adicionar à Tela de Início*. Abra pelo ícone da tela inicial (tela cheia, sem barra do Safari). Na primeira abertura a página recarrega sozinha uma vez, para o service worker assumir.
 
-**Colocar as fotos**: menu `⋯` › *Importar fotos e vídeos…* (escolha no app Fotos ou Arquivos). Os arquivos são copiados para o armazenamento do navegador e as miniaturas são geradas na hora; importar de novo o mesmo arquivo o substitui. O iPad pode não deixar escolher uma pasta inteira; então escolha vários arquivos de uma vez. *Apagar tudo do app* limpa o que foi importado (os originais no iPad não são afetados).
+**Colocar as fotos**: menu `⋯` › *Importar fotos e vídeos…* (escolha no app Fotos ou Arquivos). O seletor do iPad não deixa escolher uma pasta inteira: abra a pasta no seletor, toque em *Selecionar* e marque as fotos. Depois de escolher, o app pergunta **em qual pasta (categoria)** colocá-las (vazio = "Soltas"; `Família/Natal` cria uma subpasta). Os arquivos são copiados para o armazenamento do navegador e as miniaturas são geradas na hora; importar o mesmo arquivo na mesma pasta o substitui. Os originais continuam onde estavam, intactos, e o app não vê fotos fora do que você importa. No iPad, **importe pelo ícone da tela inicial**, não pelo Safari: os dois têm armazenamentos separados. *Apagar tudo do app* limpa o que foi importado.
+
+**Modo exposição** (para o iPad fixo na parede): menu `⋯` › *Modo exposição* esconde o menu `⋯` (sem importar, apagar, trocar pasta ou sair). Para voltar, **segure o logo "memo" por 2 segundos**. Vale também no desktop e no iPad nativo.
 
 **Limites**
 - O iOS pode apagar o armazenamento do site se faltar espaço; o app pede armazenamento persistente, mas não há garantia. Se isso acontecer, é só importar de novo.

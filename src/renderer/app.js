@@ -25,6 +25,7 @@ const state = {
   folder: null,
   layout: 'bubbles', // sempre abre em bolhas
   sort: store.get('sort', 'shuffle'),
+  expo: store.get('expo', '') === '1', // modo exposição: sem o menu ⋯
   seed: (Math.random() * 1e9) | 0,
 };
 
@@ -566,6 +567,23 @@ function popoverState() {
   els.popover.querySelectorAll('[data-sort]').forEach((b) => b.classList.toggle('on', b.dataset.sort === state.sort));
 }
 
+function setExpo(on) {
+  state.expo = on;
+  store.set('expo', on ? '1' : '');
+  document.body.classList.toggle('expo', on);
+  els.popover.hidden = true;
+}
+
+// segurar o logo por 2 s sai do modo exposição
+let expoTimer;
+const brand = $('.brand');
+brand.addEventListener('pointerdown', () => {
+  clearTimeout(expoTimer);
+  if (state.expo) expoTimer = setTimeout(() => setExpo(false), 2000);
+});
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) brand.addEventListener(ev, () => clearTimeout(expoTimer));
+brand.addEventListener('contextmenu', (e) => e.preventDefault());
+
 function resetFilters() {
   state.query = '';
   els.q.value = '';
@@ -674,6 +692,9 @@ els.popover.addEventListener('click', async (e) => {
   else if (act === 'folder') await chooseFolder();
   else if (act === 'reload') await load();
   else if (act === 'fullscreen') toggleFullscreen();
+  else if (act === 'expo') {
+    if (confirm('Ativar o modo exposição?\n\nO menu ⋯ some (sem importar, apagar ou trocar pasta). Para voltar, segure o logo "memo" por 2 segundos.')) setExpo(true);
+  }
   else if (act === 'quit') api.quit?.();
 });
 
@@ -731,6 +752,8 @@ async function load() {
 async function importFiles(directory) {
   const res = await api.importFiles({
     directory,
+    // o seletor do iPad não informa a pasta de origem: pergunta em qual categoria colocar
+    askFolder: async (n) => prompt(`Importar ${n} ${n === 1 ? 'arquivo' : 'arquivos'}.\n\nEm qual pasta (categoria) colocar? Deixe vazio para "Soltas".`, ''),
     onProgress: ({ done, total }) => { els.status.hidden = false; els.status.textContent = `Importando ${done} de ${total}…`; },
   });
   if (!res) return;
@@ -767,6 +790,7 @@ async function boot() {
   hide('#fs, #v-fs, [data-act="fullscreen"]', api.noFullscreen);
   hide('[data-act="import"], [data-act="importdir"]', !api.importFiles);
   hide('[data-act="clear"]', !api.clearAll);
+  document.body.classList.toggle('expo', state.expo);
   setLayout(state.layout);
   syncTypeButtons();
   popoverState();
