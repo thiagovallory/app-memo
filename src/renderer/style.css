@@ -202,19 +202,45 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 }
 
 /* ---------- bolhas de sabão ---------- */
-/* sem contorno: a foto some suavemente na borda e um filme iridescente fino e dois reflexos dão o volume */
+/* Como numa bolha de verdade: miolo transparente (a foto), filme fino com faixas de cor saturadas que mudam de um
+   lado para o outro (dourado, magenta, violeta, azul, ciano, verde) e se acumulam embaixo, borda nítida e fina que
+   quase some no lado sem luz, e pequenos reflexos de janela. Nada de contorno uniforme. */
+.tile .film, .tile .film2, .tile .rim { display: none; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
 .tile.bubble { transition: opacity 0.6s ease, border-radius 0.9s ease; will-change: transform; }
 .tile.bubble .face { background: none; box-shadow: none; }
 .tile.bubble .face img, .tile.bubble .face video { opacity: 0;
-  -webkit-mask-image: radial-gradient(closest-side, #000 80%, rgba(0, 0, 0, 0.55) 92%, transparent 100%);
-  mask-image: radial-gradient(closest-side, #000 80%, rgba(0, 0, 0, 0.55) 92%, transparent 100%); }
-.tile.bubble .face img.loaded, .tile.bubble .face video.loaded { opacity: 0.92; }
-.tile.bubble .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(closest-side, #000 74%, rgba(0, 0, 0, 0.82) 94%, rgba(0, 0, 0, 0.6) 99%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 74%, rgba(0, 0, 0, 0.82) 94%, rgba(0, 0, 0, 0.6) 99%, transparent 100%); }
+.tile.bubble .face img.loaded, .tile.bubble .face video.loaded { opacity: 0.95; }
+
+/* filme 1: o anel de cores perto da borda; o ponto de partida das cores (--spin) muda por bolha */
+.tile.bubble .film { display: block; opacity: 0.88;
+  background: conic-gradient(from var(--spin, 0deg), #ffb800, #ff1f8e 40deg, #6a35ff 85deg, #1e7bff 125deg, #00d4ff 165deg, #19f0a0 205deg, #ffe100 245deg, #ff6a00 285deg, #ff1f8e 325deg, #ffb800);
+  -webkit-mask-image: radial-gradient(closest-side, transparent 60%, rgba(0, 0, 0, 0.32) 76%, rgba(0, 0, 0, 0.72) 88%, #000 95%, rgba(0, 0, 0, 0.85) 98.6%, transparent 100%);
+  mask-image: radial-gradient(closest-side, transparent 60%, rgba(0, 0, 0, 0.32) 76%, rgba(0, 0, 0, 0.72) 88%, #000 95%, rgba(0, 0, 0, 0.85) 98.6%, transparent 100%); }
+
+/* filme 2: faixas quase horizontais que se acumulam na metade de baixo (o filme escorre e engrossa) */
+.tile.bubble .film2 { display: block; opacity: 0.6;
+  background: repeating-linear-gradient(172deg, #ff2e93 0%, #5b3cff 6%, #1ea0ff 12%, #19f0b0 18%, #ffe100 24%, #ff7a1a 30%, #ff2e93 36%);
+  -webkit-mask-image: radial-gradient(closest-side, transparent 38%, rgba(0, 0, 0, 0.5) 70%, #000 92%, transparent 100%), linear-gradient(180deg, transparent 38%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: radial-gradient(closest-side, transparent 38%, rgba(0, 0, 0, 0.5) 70%, #000 92%, transparent 100%), linear-gradient(180deg, transparent 38%, #000 100%);
+  mask-composite: intersect; }
+
+/* borda: linha fina e nítida, clara onde bate a luz (alto à esquerda) e quase invisível do outro lado */
+.tile.bubble .rim { display: block;
+  background: conic-gradient(from 205deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.55) 40deg, rgba(190, 230, 255, 0.2) 110deg, rgba(255, 255, 255, 0.06) 170deg, rgba(255, 190, 240, 0.26) 235deg, rgba(255, 255, 255, 0.65) 310deg, rgba(255, 255, 255, 0.98));
+  -webkit-mask-image: radial-gradient(closest-side, transparent calc(100% - 2.6px), #000 calc(100% - 1.3px), #000 calc(100% - 0.4px), transparent 100%);
+  mask-image: radial-gradient(closest-side, transparent calc(100% - 2.6px), #000 calc(100% - 1.3px), #000 calc(100% - 0.4px), transparent 100%); }
+.tile.bubble .rim::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 0.7px rgba(0, 14, 40, 0.22); }
+
+/* reflexos de janela e a borda que reflete mais e deixa passar menos luz */
+.tile.bubble .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
   background:
-    radial-gradient(circle at 30% 23%, rgba(255, 255, 255, 0.8) 0, rgba(255, 255, 255, 0) 13%),
-    radial-gradient(circle at 73% 80%, rgba(255, 255, 255, 0.26) 0, rgba(255, 255, 255, 0) 19%),
-    radial-gradient(closest-side, rgba(0, 0, 0, 0) 72%, rgba(110, 200, 255, 0.2) 86%, rgba(255, 120, 210, 0.26) 94%, rgba(255, 255, 255, 0) 100%),
-    conic-gradient(from 30deg, rgba(255, 120, 200, 0.12), rgba(120, 220, 255, 0.12), rgba(255, 240, 140, 0.1), rgba(160, 255, 190, 0.11), rgba(255, 120, 200, 0.12)); }
+    radial-gradient(ellipse 13% 7.5% at 29% 20%, rgba(255, 255, 255, 0.98) 0, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0) 100%),
+    radial-gradient(circle at 72% 79%, rgba(255, 255, 255, 0.92) 0, rgba(255, 255, 255, 0) 4.5%),
+    radial-gradient(ellipse 32% 6% at 66% 83%, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0)),
+    radial-gradient(closest-side, rgba(4, 10, 30, 0) 62%, rgba(4, 10, 30, 0.42) 93%, rgba(4, 10, 30, 0.12) 100%); }
 .tile.bubble:hover .face, .tile.bubble:active .face { box-shadow: none; }
 .tile.bubble:hover .face { transform: scale(1.04); }
 
@@ -307,7 +333,7 @@ html.lite #bg i:nth-child(3) { background: radial-gradient(closest-side, rgba(25
 html.lite .tile .float { animation: none; }
 html.lite .tile .face { box-shadow: none; transition: none; }
 html.lite .tile.bubble { will-change: auto; }
-html.lite .tile.bubble .face::after { mix-blend-mode: normal; }
+html.lite .tile.bubble .film2 { display: none; }
 html.lite .v-backdrop { filter: none; background-image: none !important; }
 html.lite .v-backdrop::after { display: none; }
 html.lite #viewer, html.lite .dlg, html.lite #manage { animation: none; }

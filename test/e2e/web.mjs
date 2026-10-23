@@ -241,8 +241,8 @@ await page.waitForFunction(() => document.querySelectorAll('.tile').length >= 5,
 ok((await page.evaluate(() => getComputedStyle(document.getElementById('bar')).opacity)) === '0', 'o modo exposição já abre com tudo escondido (sem piscar a barra)');
 
 await page.click('#layouts button[data-id="cloud"]', { force: true }).catch(() => {}); // a barra está escondida: o clique não passa
-const pt = await emptyPoint();
-ok(!!pt, 'há uma área vazia para tocar');
+let pt = null;
+ok(await until(async () => (pt = await emptyPoint())), 'há uma área vazia para tocar'); // pode demorar um instante se o visualizador ainda estiver fechando
 await page.mouse.click(pt.x, pt.y);
 ok((await barIs('1')) && !(await page.locator('#menu').isVisible()), 'tocar numa área vazia mostra a barra (sem o menu ⋯)');
 await page.locator('#q').click();

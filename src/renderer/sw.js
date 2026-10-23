@@ -2,7 +2,7 @@
 // "_memo/thumb/<id>" (com suporte a Range, que o Safari exige para vídeo) e (2) deixa o app abrir sem internet.
 importScripts('platform/web-db.js');
 
-const CACHE = 'memo-shell-v6';
+const CACHE = 'memo-shell-v7';
 const SHELL = [
   './', 'index.html', 'style.css', 'app.js', 'bubbles.js', 'viewer.js', 'keyboard.js',
   'layouts/index.js', 'layouts/cloud.js', 'layouts/bubbles.js', 'layouts/folders.js', 'layouts/grid.js', 'layouts/pack.js',
