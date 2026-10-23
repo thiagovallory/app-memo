@@ -52,12 +52,28 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 
-// um único tratador de diálogos: o prompt de pasta recebe "Viagem"; os confirm são aceitos
-const dialogs = [];
-page.on('dialog', (d) => { dialogs.push(d.type()); return d.type() === 'prompt' ? d.accept('Viagem') : d.accept(); });
-
 let failed = 0;
 const ok = (cond, msg) => { console.log(cond ? 'ok  ' : 'FAIL', msg); if (!cond) failed++; };
+// diálogo do app: texto = preenche e confirma; true = confirma; false = cancela
+const dlg = async (answer = true) => {
+  await page.waitForSelector('.dlg');
+  if (typeof answer === 'string') await page.fill('.dlg input', answer);
+  await page.click(answer === false ? '.dlg .ghost' : '.dlg .pill:not(.ghost)');
+  await page.waitForSelector('.dlg', { state: 'detached' });
+};
+const statusText = () => page.locator('#status').innerText();
+const waitStatus = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById('status').textContent), re.source, { timeout: 15000 });
+const menu = async (act) => { await page.click('#menu'); await page.click(`[data-act="${act}"]`); };
+// importa pelo menu e responde a pergunta de pasta
+const importVia = async (list, folder) => {
+  await page.click('#menu');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('[data-act="import"]')]);
+  await chooser.setFiles(list);
+  await dlg(folder);
+};
+const metas = () => page.evaluate(() => memoDb.listMeta());
+// espera até a condição (assíncrona, avaliada aqui no Node) ficar verdadeira
+const until = async (fn, ms = 8000) => { for (const t = Date.now(); Date.now() - t < ms;) { if (await fn()) return true; await page.waitForTimeout(100); } return false; };
 const eachTile = () => page.evaluate(() => document.querySelectorAll('.tile').length);
 
 await page.goto(url);
@@ -67,13 +83,47 @@ ok(await page.evaluate(() => !!navigator.serviceWorker.controller), 'o service w
 
 const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#reset')]);
 await chooser.setFiles(files);
+await dlg('Viagem');
 await page.waitForFunction(() => document.querySelectorAll('.tile').length >= 5, null, { timeout: 20000 });
 const status = await page.locator('#status').innerText();
 ok(/\d+ memórias/.test(status) && /1 ignorados/.test(status), `importou e ignorou o .txt (${status})`);
 
-ok(dialogs[0] === 'prompt', 'sem pasta de origem (iPad), o app pergunta em qual pasta colocar');
+ok(true, 'sem pasta de origem (iPad), o app pergunta em qual pasta colocar (diálogo próprio)');
 ok((await page.evaluate(() => memoDb.listMeta())).every((m) => m.folder === 'Viagem' && m.rel.startsWith('Viagem/')), 'os arquivos entram na pasta digitada');
 ok((await page.locator('#chips').innerText()).includes('Viagem'), 'a pasta aparece nos filtros do topo');
+
+// importar de novo: os mesmos arquivos são reconhecidos como repetidos, e arquivos novos entram
+const before = (await metas()).length;
+await importVia(files.slice(0, 3), 'Viagem');
+await waitStatus(/já estavam/);
+ok((await metas()).length === before, `importar os mesmos arquivos não duplica (${(await statusText()).split('·').slice(1).join('·').trim()})`);
+
+const novas = [{ name: 'natal1.png', mimeType: 'image/png', buffer: png(900, 900, [250, 20, 20]) }, { name: 'natal2.png', mimeType: 'image/png', buffer: png(900, 900, [20, 250, 20]) }];
+await importVia(novas, 'Natal');
+await waitStatus(/2 novas/);
+ok((await metas()).length === before + 2, 'uma segunda importação acrescenta fotos');
+ok((await page.locator('#chips').innerText()).includes('Natal'), 'a nova pasta aparece nos filtros');
+
+await importVia([{ name: 'foto0.png', mimeType: 'image/png', buffer: png(901, 901, [1, 2, 3]) }], 'Viagem');
+await waitStatus(/1 nova/);
+ok((await metas()).some((m) => m.rel === 'Viagem/foto0 (2).png'), 'mesmo nome com conteúdo diferente entra como "foto0 (2)", sem sobrescrever');
+
+// cancelar a pergunta de pasta não importa nada
+const n0 = (await metas()).length;
+await page.click('#menu');
+const [c2] = await Promise.all([page.waitForEvent('filechooser'), page.click('[data-act="import"]')]);
+await c2.setFiles([{ name: 'cancelada.png', mimeType: 'image/png', buffer: png(900, 900, [9, 9, 9]) }]);
+await dlg(false);
+ok((await metas()).length === n0, 'cancelar a pergunta de pasta não importa');
+
+// arrastar para a janela
+await page.evaluate(() => {
+  const dt = new DataTransfer();
+  dt.items.add(new File([new Uint8Array(2000).fill(5)], 'arrastada.png', { type: 'image/png' }));
+  document.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+});
+await dlg('Arrastadas');
+ok(await until(async () => (await metas()).some((m) => m.rel === 'Arrastadas/arrastada.png')), 'arrastar arquivos para a janela importa');
 
 const thumbs = async () => (await page.evaluate(() => memoDb.listThumbIds())).length;
 for (let i = 0; i < 60 && (await thumbs()) < 6; i++) await page.waitForTimeout(500);
@@ -112,7 +162,7 @@ await page.click('#menu');
 ok(await page.locator('[data-act="import"]').isVisible() && !(await page.locator('[data-act="folder"]').isVisible()), 'menu mostra importar e esconde "Trocar pasta"');
 // modo exposição: o menu some e só volta segurando o logo por 2 s
 await page.click('[data-act="expo"]');
-await page.waitForTimeout(200);
+await dlg(true);
 ok(!(await page.locator('#menu').isVisible()), 'modo exposição esconde o menu ⋯');
 await page.reload();
 await page.waitForFunction(() => document.querySelectorAll('.tile').length >= 5, null, { timeout: 15000 });
@@ -126,8 +176,46 @@ await page.waitForTimeout(1500);
 await page.mouse.up();
 ok(await page.locator('#menu').isVisible(), 'segurar o logo por 2 s volta o menu');
 
+// organizar: pastas e fotos
+await menu('manage');
+await page.waitForSelector('#manage:not([hidden])');
+ok((await page.locator('#manage .m-row').count()) === 3, 'Organizar lista as pastas (Viagem, Natal, Arrastadas)');
+const rowOf = (name) => page.locator('#manage .m-row', { has: page.locator('b', { hasText: new RegExp(`^${name}$`) }) });
+await rowOf('Natal').getByText('Renomear').click();
+await dlg('Festas/Natal');
+ok(await until(async () => (await metas()).filter((m) => m.folder === 'Festas/Natal').length === 2), 'renomear pasta move as fotos (subpasta Festas/Natal)');
+const thumbsAfter = await page.evaluate(async () => { const m = (await memoDb.listMeta()).find((x) => x.folder === 'Festas/Natal'); return !!(await memoDb.getBlob('blobs', m.id)); });
+ok(thumbsAfter, 'o arquivo continua acessível depois de mudar de pasta');
+
+await page.click('#manage .seg button[data-tab="photos"]');
+await page.selectOption('#manage select', 'Festas/Natal');
+await page.locator('#manage .m-cell').first().click();
+await page.locator('#manage .m-cell').nth(1).click();
+ok((await page.locator('#manage .m-count').innerText()).startsWith('2'), 'selecionar fotos mostra a contagem');
+await page.click('#manage [data-do="move"]');
+await dlg('Viagem');
+ok(await until(async () => (await metas()).filter((m) => m.rel.startsWith('Viagem/natal')).length === 2), 'mover fotos selecionadas para outra pasta');
+
+await page.selectOption('#manage select', 'Arrastadas');
+await page.locator('#manage .m-cell').first().click();
+await page.click('#manage [data-do="delete"]');
+await dlg(false);
+ok((await metas()).some((m) => m.folder === 'Arrastadas'), 'cancelar a exclusão não apaga');
+await page.click('#manage [data-do="delete"]');
+await dlg(true);
+ok(await until(async () => (await metas()).every((m) => m.folder !== 'Arrastadas')), 'excluir fotos selecionadas');
+
+await page.click('#manage .seg button[data-tab="folders"]');
+const nViagem = (await metas()).filter((m) => m.folder === 'Viagem' || m.folder.startsWith('Viagem/')).length;
+await rowOf('Viagem').getByText('Excluir').click();
+await dlg(true);
+ok(nViagem > 0 && (await until(async () => (await metas()).every((m) => !m.folder.startsWith('Viagem')))), `excluir pasta apaga o que há nela (${nViagem} itens)`);
+await page.click('#manage .m-close');
+ok(await page.locator('#manage').isHidden(), 'fechar a tela Organizar');
+
 await page.click('#menu');
 await page.click('[data-act="clear"]');
+await dlg(true);
 await page.waitForSelector('#empty:not([hidden])');
 await page.waitForFunction(() => document.querySelectorAll('.tile').length === 0, null, { timeout: 5000 }).catch(() => {}); // as bolhas saem com uma animação
 ok((await page.evaluate(() => memoDb.listMeta())).length === 0 && (await eachTile()) === 0, 'apagar tudo limpa o banco e a tela');

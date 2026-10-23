@@ -68,6 +68,29 @@
     return !!meta;
   }
 
+  // muda um arquivo de lugar: o id vem do caminho, então blob e miniatura passam para a chave nova
+  async function moveFile(oldId, meta) {
+    const db = await open();
+    const tx = db.transaction(['meta', 'blobs', 'thumbs'], 'readwrite');
+    const blob = await wrap(tx.objectStore('blobs').get(oldId));
+    const thumb = await wrap(tx.objectStore('thumbs').get(oldId));
+    if (blob === undefined) { tx.abort(); throw new Error('arquivo não encontrado'); }
+    if (oldId !== meta.id) {
+      for (const s of ['meta', 'blobs', 'thumbs']) tx.objectStore(s).delete(oldId);
+    }
+    tx.objectStore('meta').put(meta);
+    tx.objectStore('blobs').put(blob, meta.id);
+    if (thumb !== undefined) tx.objectStore('thumbs').put(thumb, meta.id);
+    await done(tx);
+  }
+
+  async function deleteFiles(ids) {
+    const db = await open();
+    const tx = db.transaction(['meta', 'blobs', 'thumbs'], 'readwrite');
+    for (const id of ids) for (const s of ['meta', 'blobs', 'thumbs']) tx.objectStore(s).delete(id);
+    await done(tx);
+  }
+
   async function clearAll() {
     const db = await open();
     const tx = db.transaction(['meta', 'blobs', 'thumbs'], 'readwrite');
@@ -75,5 +98,5 @@
     await done(tx);
   }
 
-  root.memoDb = { open, putFile, listMeta, listThumbIds, getBlob, putThumb, clearAll };
+  root.memoDb = { open, putFile, listMeta, listThumbIds, getBlob, putThumb, moveFile, deleteFiles, clearAll };
 })(typeof self !== 'undefined' ? self : globalThis);

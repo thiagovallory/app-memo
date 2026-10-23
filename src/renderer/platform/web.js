@@ -1,8 +1,9 @@
 // Ponte da versão web (PWA no Safari/Chrome): mesma API do preload.js do Electron.
-// As fotos e vídeos são importados pelo seletor de arquivos e ficam no IndexedDB do navegador (web-db.js);
-// o service worker (sw.js) os serve em "_memo/file/<id>" e "_memo/thumb/<id>".
+// As fotos e vídeos são importados pelo seletor de arquivos (ou arrastados para a janela) e ficam no
+// IndexedDB do navegador (web-db.js); o service worker (sw.js) os serve em "_memo/file/<id>" e "_memo/thumb/<id>".
 import { hashSeed } from '../layouts/pack.js';
 import { cleanFolder } from './folder-name.js';
+import { collectDropped } from './drop.js';
 
 const db = globalThis.memoDb;
 
@@ -16,6 +17,21 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
 
   // 64 bits (duas sementes): com milhares de fotos, 32 bits colidiriam
   const idFor = (rel) => hashSeed(rel).toString(36) + hashSeed([...rel].reverse().join('')).toString(36);
+  const splitName = (rel) => {
+    const base = rel.slice(rel.lastIndexOf('/') + 1);
+    const dot = base.lastIndexOf('.');
+    return dot > 0 ? { stem: base.slice(0, dot), ext: base.slice(dot + 1).toLowerCase() } : { stem: base, ext: '' };
+  };
+
+  // "foto.jpg" -> "foto (2).jpg" -> "foto (3).jpg" até não existir (sem diferenciar maiúsculas)
+  function uniqueRel(rel, taken) {
+    if (!taken.has(rel.toLowerCase())) return rel;
+    const cut = rel.lastIndexOf('.') > rel.lastIndexOf('/') + 1 ? rel.lastIndexOf('.') : rel.length;
+    for (let n = 2; ; n++) {
+      const next = `${rel.slice(0, cut)} (${n})${rel.slice(cut)}`;
+      if (!taken.has(next.toLowerCase())) return next;
+    }
+  }
 
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
@@ -34,27 +50,71 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
   }
 
   // tela sempre ligada (Wake Lock: iOS 16.4 ou mais novo); precisa ser pedida de novo ao voltar para o app
-  let wake = null;
   async function keepAwake() {
-    try { wake = await navigator.wakeLock?.request('screen'); } catch { /* sem suporte ou negado */ }
+    try { await navigator.wakeLock?.request('screen'); } catch { /* sem suporte ou negado */ }
   }
   keepAwake();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
 
-  function pick({ directory }) {
-    return new Promise((resolve) => {
+  // Os <input type=file> ficam no documento (o iOS pode descartar um input solto antes do "change") e o valor
+  // é zerado a cada uso: sem isso, escolher os mesmos arquivos de novo não dispara "change".
+  const inputs = {};
+  let pending = null;
+  function inputFor(directory) {
+    const key = directory ? 'dir' : 'files';
+    if (!inputs[key]) {
       const input = document.createElement('input');
       input.type = 'file';
       input.multiple = true;
+      input.hidden = true;
       if (directory) input.webkitdirectory = true;
       else input.accept = 'image/*,video/*';
-      input.addEventListener('change', () => resolve([...input.files]), { once: true });
-      input.addEventListener('cancel', () => resolve([]), { once: true });
+      input.addEventListener('change', () => pending?.(input.files ? [...input.files] : []));
+      input.addEventListener('cancel', () => pending?.([]));
+      document.body.append(input);
+      inputs[key] = input;
+    }
+    return inputs[key];
+  }
+  function pick({ directory }) {
+    pending?.([]); // um seletor anterior que nunca respondeu (o iOS nem sempre avisa o cancelamento)
+    return new Promise((resolve) => {
+      const input = inputFor(directory);
+      pending = (files) => { pending = null; resolve(files.map((file) => ({ file, rel: file.webkitRelativePath || file.name }))); };
+      input.value = '';
       input.click(); // precisa rodar dentro do toque do usuário
     });
   }
 
   const startup = ready();
+
+  // arrastar fotos e pastas para a janela (computador): avisa a interface, que cuida do resto
+  document.addEventListener('dragover', (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+  document.addEventListener('drop', async (e) => {
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    const entries = await collectDropped(e.dataTransfer);
+    if (entries.length) document.dispatchEvent(new CustomEvent('memo:drop', { detail: entries }));
+  });
+
+  // muda arquivos de pasta (ou de nome, se já existir um igual lá)
+  async function relocate(items, folderFor) {
+    const all = await db.listMeta();
+    const leaving = new Set(items.map((m) => m.id));
+    const taken = new Set(all.filter((m) => !leaving.has(m.id)).map((m) => m.rel.toLowerCase()));
+    let moved = 0;
+    for (const m of items) {
+      const folder = cleanFolder(folderFor(m));
+      const base = m.rel.slice(m.rel.lastIndexOf('/') + 1);
+      const rel = uniqueRel(folder ? `${folder}/${base}` : base, taken);
+      taken.add(rel.toLowerCase());
+      if (rel === m.rel) continue;
+      await db.moveFile(m.id, { ...m, id: idFor(rel), rel, folder: rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '' });
+      moved++;
+    }
+    return moved;
+  }
+  const inFolder = (m, folder) => m.folder === folder || m.folder.startsWith(folder + '/');
 
   window.memo = {
     noFullscreen: standalone || !document.documentElement.requestFullscreen,
@@ -84,46 +144,79 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
     },
 
     /**
-     * Abre o seletor de arquivos (ou de pasta) e guarda o que for foto ou vídeo.
-     * Quando o navegador não informa a pasta (iPad), `askFolder(quantidade)` pergunta em qual pasta
-     * colocar os arquivos (texto vazio = "Soltas"; null cancela).
-     * Devolve { added, skipped, failed: [{ name, error }] }, ou null se nada foi escolhido.
+     * Guarda fotos e vídeos. Os arquivos vêm do seletor (ou de `entries`, [{ file, rel }], quando foram
+     * arrastados para a janela). Quando não trazem pasta (iPad), `askFolder(quantidade)` pergunta em qual pasta
+     * colocá-los (texto vazio = "Soltas"; null cancela).
+     *
+     * Um arquivo com o mesmo nome e tamanho de um que já está na pasta é tratado como repetido e ignorado;
+     * com o mesmo nome mas conteúdo diferente, entra como "nome (2)". Nada é sobrescrito sem aviso.
+     * Devolve { added, duplicates, skipped, failed: [{ name, error }] }, ou null se nada foi escolhido.
      */
-    async importFiles({ directory = false, onProgress, askFolder } = {}) {
-      const files = await pick({ directory });
-      if (!files.length) return null;
+    async importFiles({ directory = false, entries = null, onProgress, askFolder } = {}) {
+      const picked = entries || (await pick({ directory }));
+      if (!picked.length) return null;
       let prefix = '';
-      if (askFolder && !files.some((f) => f.webkitRelativePath)) {
-        const answer = await askFolder(files.length);
+      if (askFolder && !picked.some((e) => e.rel.includes('/'))) {
+        const answer = await askFolder(picked.length);
         if (answer === null || answer === undefined) return null;
         prefix = cleanFolder(answer);
       }
       await startup;
       navigator.storage?.persist?.().catch(() => {}); // pede para o navegador não apagar as fotos
 
-      const result = { added: 0, skipped: 0, failed: [] };
+      const existing = await db.listMeta();
+      const taken = new Set(existing.map((m) => m.rel.toLowerCase()));
+      const sizes = new Map(existing.map((m) => [m.rel.toLowerCase(), m.size]));
+
+      const result = { added: 0, duplicates: 0, skipped: 0, failed: [] };
       let n = 0;
-      for (const file of files) {
-        onProgress?.({ done: n++, total: files.length });
-        const rel = (file.webkitRelativePath || (prefix ? `${prefix}/${file.name}` : file.name)).split('/').filter(Boolean).join('/');
-        const dot = file.name.lastIndexOf('.');
-        const ext = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : '';
+      for (const { file, rel: given } of picked) {
+        onProgress?.({ done: n++, total: picked.length });
+        const { stem, ext } = splitName(file.name);
         const type = IMAGE_EXT.has(ext) ? 'image' : VIDEO_EXT.has(ext) ? 'video' : null;
         if (!type) { result.skipped++; continue; }
+
+        let rel = (prefix && !given.includes('/') ? `${prefix}/${given}` : given).split('/').filter(Boolean).join('/');
+        if (sizes.get(rel.toLowerCase()) === file.size) { result.duplicates++; continue; }
+        rel = uniqueRel(rel, taken);
         try {
           await db.putFile({
-            id: idFor(rel), rel, name: file.name.slice(0, dot), ext, type,
+            id: idFor(rel), rel, name: rel.slice(rel.lastIndexOf('/') + 1).replace(/\.[^.]*$/, '') || stem, ext, type,
             folder: rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '',
             mtime: file.lastModified || Date.now(), size: file.size,
           }, file);
+          taken.add(rel.toLowerCase());
+          sizes.set(rel.toLowerCase(), file.size);
           result.added++;
         } catch (err) {
           result.failed.push({ name: file.name, error: String(err?.name === 'QuotaExceededError' ? 'sem espaço no iPad' : err?.message || err) });
           if (err?.name === 'QuotaExceededError') break;
         }
       }
-      onProgress?.({ done: files.length, total: files.length });
+      onProgress?.({ done: picked.length, total: picked.length });
       return result;
+    },
+
+    // organizar o que foi importado (só existe aqui: nas outras versões os arquivos são os seus originais)
+    manage: {
+      async moveItems(ids, folder) {
+        const want = new Set(ids);
+        const items = (await db.listMeta()).filter((m) => want.has(m.id));
+        return relocate(items, () => folder);
+      },
+      async renameFolder(from, to) {
+        const items = (await db.listMeta()).filter((m) => inFolder(m, from));
+        return relocate(items, (m) => (to ? to + m.folder.slice(from.length) : m.folder.slice(from.length + 1)));
+      },
+      async deleteItems(ids) {
+        await db.deleteFiles(ids);
+        return ids.length;
+      },
+      async deleteFolder(folder) {
+        const ids = (await db.listMeta()).filter((m) => inFolder(m, folder)).map((m) => m.id);
+        await db.deleteFiles(ids);
+        return ids.length;
+      },
     },
 
     async clearAll() {

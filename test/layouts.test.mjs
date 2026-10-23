@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { layouts } from '../src/renderer/layouts/index.js';
 import folders from '../src/renderer/layouts/folders.js';
 import { cleanFolder } from '../src/renderer/platform/folder-name.js';
+import { collectDropped } from '../src/renderer/platform/drop.js';
 
 const require = createRequire(import.meta.url);
 const { jpegOrientation } = require('../src/exif.js');
@@ -67,4 +68,34 @@ test('jpegOrientation tolera lixo e arquivos sem EXIF', () => {
   assert.equal(jpegOrientation(Buffer.from('not a jpeg')), 1);
   assert.equal(jpegOrientation(Buffer.from([0xff, 0xd8, 0xff, 0xd9])), 1);
   assert.equal(jpegOrientation(jpegWith(6).subarray(0, 14)), 1);
+});
+
+// entradas falsas da API de arquivos do navegador (FileSystemEntry)
+const fileEntry = (name) => ({ isFile: true, isDirectory: false, name, file: (ok) => ok({ name }) });
+const dirEntry = (name, children, batch = 2) => ({
+  isFile: false, isDirectory: true, name,
+  createReader() {
+    let at = 0;
+    return { readEntries: (ok) => { const out = children.slice(at, at + batch); at += batch; ok(out); } }; // devolve em lotes, como o navegador
+  },
+});
+const item = (entry, file) => ({ kind: 'file', webkitGetAsEntry: () => entry, getAsFile: () => file });
+
+test('collectDropped: pastas em qualquer profundidade, em lotes, e arquivos soltos', async () => {
+  const dt = {
+    items: [
+      item(dirEntry('Viagem', [fileEntry('a.jpg'), fileEntry('b.jpg'), dirEntry('Praia', [fileEntry('c.jpg')]), fileEntry('d.jpg')])),
+      item(fileEntry('solta.png')),
+      item(null, { name: 'sem-entrada.png' }),
+      { kind: 'string', getAsFile: () => null },
+    ],
+  };
+  const rels = (await collectDropped(dt)).map((e) => e.rel).sort();
+  assert.deepEqual(rels, ['Viagem/Praia/c.jpg', 'Viagem/a.jpg', 'Viagem/b.jpg', 'Viagem/d.jpg', 'sem-entrada.png', 'solta.png']);
+});
+
+test('collectDropped: um item ilegível não impede os outros', async () => {
+  const quebrado = { isFile: true, isDirectory: false, name: 'x', file: (_ok, fail) => fail(new Error('sem permissão')) };
+  const out = await collectDropped({ items: [item(quebrado), item(fileEntry('ok.jpg'))] });
+  assert.deepEqual(out.map((e) => e.rel), ['ok.jpg']);
 });
