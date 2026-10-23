@@ -2,6 +2,7 @@
 // As fotos e vídeos são importados pelo seletor de arquivos e ficam no IndexedDB do navegador (web-db.js);
 // o service worker (sw.js) os serve em "_memo/file/<id>" e "_memo/thumb/<id>".
 import { hashSeed } from '../layouts/pack.js';
+import { cleanFolder } from './folder-name.js';
 
 const db = globalThis.memoDb;
 
@@ -84,11 +85,19 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
 
     /**
      * Abre o seletor de arquivos (ou de pasta) e guarda o que for foto ou vídeo.
+     * Quando o navegador não informa a pasta (iPad), `askFolder(quantidade)` pergunta em qual pasta
+     * colocar os arquivos (texto vazio = "Soltas"; null cancela).
      * Devolve { added, skipped, failed: [{ name, error }] }, ou null se nada foi escolhido.
      */
-    async importFiles({ directory = false, onProgress } = {}) {
+    async importFiles({ directory = false, onProgress, askFolder } = {}) {
       const files = await pick({ directory });
       if (!files.length) return null;
+      let prefix = '';
+      if (askFolder && !files.some((f) => f.webkitRelativePath)) {
+        const answer = await askFolder(files.length);
+        if (answer === null || answer === undefined) return null;
+        prefix = cleanFolder(answer);
+      }
       await startup;
       navigator.storage?.persist?.().catch(() => {}); // pede para o navegador não apagar as fotos
 
@@ -96,7 +105,7 @@ if (!window.memo && !window.Capacitor?.isNativePlatform?.() && db && 'serviceWor
       let n = 0;
       for (const file of files) {
         onProgress?.({ done: n++, total: files.length });
-        const rel = (file.webkitRelativePath || file.name).split('/').filter(Boolean).join('/');
+        const rel = (file.webkitRelativePath || (prefix ? `${prefix}/${file.name}` : file.name)).split('/').filter(Boolean).join('/');
         const dot = file.name.lastIndexOf('.');
         const ext = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : '';
         const type = IMAGE_EXT.has(ext) ? 'image' : VIDEO_EXT.has(ext) ? 'video' : null;

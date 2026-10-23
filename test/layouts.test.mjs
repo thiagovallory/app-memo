@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { layouts } from '../src/renderer/layouts/index.js';
 import folders from '../src/renderer/layouts/folders.js';
+import { cleanFolder } from '../src/renderer/platform/folder-name.js';
 
 const require = createRequire(import.meta.url);
 const { jpegOrientation } = require('../src/exif.js');
@@ -48,6 +49,17 @@ test('jpegOrientation lê EXIF em little e big endian', () => {
   assert.equal(jpegOrientation(jpegWith(6)), 6);
   assert.equal(jpegOrientation(jpegWith(8, false)), 8);
   assert.equal(jpegOrientation(jpegWith(1)), 1);
+});
+
+test('cleanFolder: caminho seguro a partir do que o usuário digita', () => {
+  assert.equal(cleanFolder('Viagem 2025'), 'Viagem 2025');
+  assert.equal(cleanFolder('  Família / Natal  '), 'Família/Natal');
+  assert.equal(cleanFolder('../../etc'), 'etc');
+  assert.equal(cleanFolder('a\\b:c*d?'), 'abcd');
+  assert.equal(cleanFolder('///'), '');
+  assert.equal(cleanFolder(''), '');
+  assert.equal(cleanFolder(null), '');
+  assert.equal(cleanFolder('x'.repeat(100)).length, 60);
 });
 
 test('jpegOrientation tolera lixo e arquivos sem EXIF', () => {
